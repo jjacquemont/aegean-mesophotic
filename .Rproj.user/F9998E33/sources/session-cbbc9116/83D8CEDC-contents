@@ -1,0 +1,782 @@
+## Difference with 1.1 script:
+  ## correct cropped files and binded MPAs from Map_processing_1.2
+  ## MPAs are attributed to realms by rasterizing the ecoregion file instead
+      # of using the centroids of MPAs
+  ## areas are calculated from cell frequency 
+  ## 
+
+
+#### 0. Loading library & files ####
+library(sf)          # classes and functions for vector data
+library(terra)      # classes and functions for raster data
+library(spData)        # load geographic data
+library(spDataLarge)   # load larger geographic data
+library(tmap)
+library(tidyverse)
+library(maptools)
+library(stars)  #display raster using tm_shape
+library(dplyr) 
+library(viridis)
+
+
+sf::sf_use_s2(FALSE)
+area_depth_ocean <- read_csv("Constant_files/file_area_depth_ocean.csv")
+bathy_cellSize <- rast("Constant_files/bathy_cellSize_1.1.tif")
+ecoregions <- vect("Constant_files/WCMC-036-MEOW-PPOW-2007-2012-NoCoast.shp")
+land <- vect("Constant_files/ne_10m_land.shp")
+bathy_cropped <- rast("Step1_Map_Processing/10m_land_1.2/bathy_cropped_1.2.tif")
+MPAbind <- vect("Step1_Map_Processing/10m_land_1.2/MPA_bind_1.2.shp")
+MPA_depth_area <- read_csv("Step1_Map_Processing/10m_land_1.2/file_depth_area_MPA_1.2.csv")
+MPA_cellSize <- read_csv("Step2_Protection_Levels/Protection_Levels_1.1/file_MPA_cellSize.csv")
+ecoregions_cropped <- st_read("Step3_Ecoregions/Ecoregions1.2/file_ecoregions_cropped.shp")
+OECM_rast <- vect("Constant_files/OECM_cropped_simp_1.2.shp")
+OECM_cellSize <- read_csv("Step1_Map_Processing/10m_land_1.2/file_OECM_cellSize_1.2.csv")
+
+#### 1. Area calculations ####
+#### 1.1 Calculating the area of ecoregions ####
+# unsure this section serves any purpose. Re run it to check 
+  ## cropping to ocean limits and rasterizing
+      # cropping
+ecoregions <- vect("Constant_files/WCMC-036-MEOW-PPOW-2007-2012-NoCoast.shp")
+land <- vect("Constant_files/ne_10m_land.shp")
+
+ecoregions_cropped <- erase(ecoregions,land)
+ecoregions_cropped <- st_as_sf(ecoregions_cropped)
+ecoregions_cropped <- st_simplify(ecoregions_cropped,dTolerance =0.01)
+st_crs(ecoregions_cropped) <- 4326
+#st_write(ecoregions_cropped,"Step3_Ecoregions/Ecoregions1.2/file_ecoregions_cropped.shp")
+
+      # rasterizing
+ecoregions_cropped <- vect("Step3_Ecoregions/Ecoregions1.2/file_ecoregions_cropped.shp")
+bathy_cropped <- rast("Step1_Map_Processing/10m_land_1.2/bathy_cropped_1.2.tif")
+raster_ecoregions <- terra::rasterize(ecoregions_cropped, bathy_cropped, field = "REALM")
+extract_ecoregions_global <- terra::extract(raster_ecoregions,vect(ecoregions_cropped),
+                                            weights = F, exact = F, cells=T)
+  ## calculating pixel size of the raster 
+pixelHeight <- 0.00416666*60*1852 # in m
+# dimension of the pixel in degree * minutes in a degree * m in a minute
+pixelLatitude <- yFromRow(bathy_cropped,1:nrow(bathy_cropped))
+pixelWidth <- 2*pi*6378*cos(pixelLatitude*pi/180)/86400*1000
+pixelArea <- round(pixelHeight*pixelWidth,1)
+pixelArea_table <-matrix(data=rep(pixelArea,ncol(bathy_cropped)), ncol=ncol(bathy_cropped),
+                         nrow=nrow(bathy_cropped))
+rast_bathy_cellarea <- rast(pixelArea_table, crs="EPSG:4326")
+ext(rast_bathy_cellarea) <- c(-180,180,-90,90)
+
+  ## summing areas across depth categories 
+depth_area_ecoregions <- zonal(rast_bathy_cellarea, raster_ecoregions, fun="sum",na.rm=TRUE)
+names(depth_area_ecoregions) <- c("bathy","area_km2")
+depth_area_ecoregions$area_km2 <- depth_area_ecoregions$area_km2/10^6
+sum(depth_area_ecoregions$area_km2)
+depth_area_ecoregions <- depth_area_ecoregions[depth_area_ecoregions$bathy!=0,]
+#write_csv(depth_area_ecoregions,"Step3_Ecoregions/Ecoregions1.2/file_area_depth_ecoregions_1.2.csv")
+
+#### 1.2 Calculating area of MPAs in each ecoregion + plot  ####
+MPA_cellSize <- read_csv("Step2_Protection_Levels/Protection_Levels_1.1/file_MPA_cellSize.csv")
+MPA_depth_area <- read_csv("Step1_Map_Processing/10m_land_1.2/file_depth_area_MPA_1.2.csv")
+
+  # attributing each raster pixel to an ecoregion
+extract_ecoregions <- terra::extract(raster_ecoregions, MPAbind, weights = F, exact = F, cells=T)
+extract_ecoregions_OECM <- terra::extract(raster_ecoregions, OECM_rast, weights = F, exact = F, cells=T)
+
+  # adding ecoregion value to previous sheet containing protection level and cell size 
+MPA_cellSize$ecoregion <- extract_ecoregions$REALM
+MPA_depth_IUCN_ecoregion <- MPA_cellSize
+OECM_cellSize$ecoregion <- extract_ecoregions_OECM$REALM
+OECM_depth_IUCN_ecoregion <- OECM_cellSize
+
+#write_csv(MPA_depth_IUCN_ecoregion,"Step3_Ecoregions/Ecoregions1.2/file_MPA_depth_IUCN_ecoregion.csv")
+#write_csv(OECM_depth_IUCN_ecoregion,"Step3_Ecoregions/Ecoregions1.2/file_OECM_depth_IUCN_ecoregion.csv")
+
+MPA_depth_IUCN_ecoregion <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_MPA_depth_IUCN_ecoregion.csv")
+  # summing pixel areas across ecoregion and depth 
+ecoregion_depth <- tapply(MPA_depth_IUCN_ecoregion$area, list(MPA_depth_IUCN_ecoregion$ecoregion, MPA_depth_IUCN_ecoregion$bathy), sum)
+ecoregion_depth <- as.data.frame(t((ecoregion_depth)))
+  ## creating summary table with depth, ecoregion and area 
+MPA_ecoregion_areas <- unlist(c(ecoregion_depth[,c(1:16)]))
+ecoregions <- rep(as.character(colnames(ecoregion_depth)[1:16]),each=8)
+bathy <- c(rep(as.numeric(rownames(ecoregion_depth)),8))
+ecoregion_depth_summary2 <- data.frame(MPA_ecoregion_areas,ecoregions,bathy)
+ecoregion_depth_summary2 <- ecoregion_depth_summary2[!is.na(ecoregion_depth_summary2$MPA_ecoregion_areas),]
+#write_csv(ecoregion_depth_summary2,"Step3_Ecoregions/Ecoregions1.2/file_ecoregion_depth_summary2.csv")
+
+  ## same but for OECMs
+OECM_depth_IUCN_ecoregion <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_OECM_depth_IUCN_ecoregion.csv")
+OECM_depth_IUCN_ecoregion <- OECM_depth_IUCN_ecoregion %>%
+  group_by(ecoregion,bathy) %>%
+  summarize(area_OECM=sum(area))
+OECM_depth_IUCN_ecoregion <- OECM_depth_IUCN_ecoregion[!is.na(OECM_depth_IUCN_ecoregion$ecoregion),]
+OECM_depth_IUCN_ecoregion <- OECM_depth_IUCN_ecoregion[!is.na(OECM_depth_IUCN_ecoregion$bathy),] 
+OECM_depth_IUCN_ecoregion$IUCN <- "OECM"
+#write_csv(OECM_depth_IUCN_ecoregion,"Step3_Ecoregions/Ecoregions1.2/file_OECM_ecoregion.csv")
+
+#### 1.3.0. Contribution of each ecoregion to the protection coverage across depths ####
+ecoregion_depth_summary2 <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_ecoregion_depth_summary2.csv")
+
+ecoregion_depth_summary2$bathy <- factor(ecoregion_depth_summary2$bathy,
+                                   levels = rev(c("-30","-60","-150","-300",
+                                                  "-1000","-3500","-6000","-11000")))
+
+MPA_depth_area$bathy <- factor(MPA_depth_area$bathy,
+                                        levels = rev(c("-30","-60","-150","-300",
+                                                       "-1000","-3500","-6000","-11000")))
+
+ggplot() + 
+  geom_point(ecoregion_depth_summary2 , size=4, mapping=aes(x=bathy, y=MPA_ecoregion_areas, color=ecoregions),
+             position="jitter")+
+  geom_col(MPA_depth_area, mapping=aes(x=bathy,y=area_km),
+           color="blue", alpha=0)+
+  scale_x_discrete(labels = rev(c('0 to -30','-30 to -60','-60 to -150',"-150 to -300",
+                                  "-300 to -1000","-1000 to -3500","-3500 to -6000",
+                                  "-6000 to -11000")))
+
+#### 1.3.1. Area of each depth realm in ecoregions (1 to 14) ####
+ecoregions_cropped <- vect("Step3_Ecoregions/Ecoregions1.2/file_ecoregions_cropped.shp")
+ecoregions_cropped <- ecoregions_cropped %>%
+  select(REALM)
+pixelHeight <- 0.00416666*60*1.852 # in km
+# dimension of the pixel in degree * minutes in a degree * m in a minute
+
+## function used to calculate the depth distribution in each ecoregion
+ecoregion_depth <- function(ecoregion,vect_realm,bathy_cropped){
+  vect_ecoregion <- vect_realm[vect_realm$REALM==ecoregion,]
+  extraction <- terra::extract(bathy_cropped, vect(vect_ecoregion), 
+                               weights = F, exact = F, xy=T)
+  extraction$area <- pixelHeight*2*pi*6378*cos(extraction$y*pi/180)/86400
+  extraction <- extraction %>% rename("bathy"="bathymetry_classified3R")
+  depth_area <- tapply(extraction$area,extraction$bathy,sum)
+  depth_area <- as.data.frame(depth_area)
+  depth_area$bathy <- as.numeric(rownames(depth_area))
+  depth_area <- depth_area[depth_area$bathy!="NaN",]
+  colnames(depth_area) <- c("area_km","bathy")
+  depth_area$realm <- c(ecoregion)
+  return(depth_area)
+}
+
+# 1. Atlantic Warm Water (24 minutes) OK
+depth_AtWarm <- ecoregion_depth("Atlantic Warm Water",
+                                ecoregions_cropped,bathy_cropped)
+write_csv(depth_AtWarm, "file_AtWarm_1.2.csv")
+
+# 2. Arctic OK
+depth_Arctic <- ecoregion_depth("Arctic",ecoregions_cropped,bathy_cropped)
+write_csv(depth_Arctic, "file_Arctic_1.2.csv")
+
+# 3. Northern Cold Water (1 hour) OK
+depth_NorthernCold <- ecoregion_depth("Northern Cold Water",
+                                           ecoregions_cropped,bathy_cropped)
+write_csv(depth_NorthernCold, "file_NorthernCold_1.2.csv")
+
+# 4. Southern Ocean (11 minutes) OK
+depth_Southern_Ocean <- ecoregion_depth("Southern Ocean",
+                                      ecoregions_cropped,bathy_cropped)
+write_csv(depth_Southern_Ocean, "file_Southern_Ocean_1.2.csv")
+
+# 5. Temperate Australasia (2 minutes) OK
+depth_Temp_Australasia <- ecoregion_depth("Temperate Australasia",
+                                          ecoregions_cropped,bathy_cropped)
+write_csv(depth_Temp_Australasia, "file_TempAustralasia_1.2.csv")
+
+# 6. Temperate Northern Atlantic (6 minutes) OK
+depth_Temp_North_Atl <- ecoregion_depth("Temperate Northern Atlantic",
+                                          ecoregions_cropped,bathy_cropped)
+write_csv(depth_Temp_North_Atl, "file_Temp_North_Atl_1.2.csv")
+
+# 7. Temperate Northern Pacific (5 minutes) OK
+depth_Temp_North_Pac <- ecoregion_depth("Temperate Northern Pacific",
+                                        ecoregions_cropped,bathy_cropped)
+write_csv(depth_Temp_North_Pac, "file_Temp_North_Pac_1.2.csv")
+
+# 8. Temperate South America (2 minutes) OK
+depth_Temp_South_Am <- ecoregion_depth("Temperate South America",
+                                        ecoregions_cropped,bathy_cropped)
+write_csv(depth_Temp_South_Am, "file_Temp_South_Am_1.2.csv")
+
+# 9. Temperate Southern Africa (33s) OK
+depth_Temp_South_Africa <- ecoregion_depth("Temperate Southern Africa",
+                                          ecoregions_cropped,bathy_cropped)
+write_csv(depth_Temp_South_Africa, "file_TempSouthAf_1.2.csv")
+
+# 10. Tropical Atlantic (3 minutes) OK
+depth_Tropical_Atl <- ecoregion_depth("Tropical Atlantic",
+                                           ecoregions_cropped,bathy_cropped)
+write_csv(depth_Tropical_Atl, "file_Tropical_Atl_1.2.csv")
+
+# 11. Tropical Eastern Pacific (30s) OK
+depth_Tropical_EastPac <- ecoregion_depth("Tropical Eastern Pacific",
+                                      ecoregions_cropped,bathy_cropped)
+write_csv(depth_Tropical_EastPac, "file_Tropical_EastPac.csv")
+
+# 12. Western Indo Pacific (4min) OK
+depth_West_IndoPac <- ecoregion_depth("Western Indo-Pacific",
+                                          ecoregions_cropped,bathy_cropped)
+write_csv(depth_West_IndoPac, "file_West_IndoPac.csv")
+
+# 13. Central Indo-Pacific (few minutes) OK
+depth_Central_IndoPac <- ecoregion_depth("Central Indo-Pacific",
+                                      ecoregions_cropped,bathy_cropped)
+write_csv(depth_Central_IndoPac, "file_Central_IndoPac.csv")
+
+# 14. Eastern Indo-Pacific (few minutes) OK
+depth_Eastern_IndoPac <- ecoregion_depth("Eastern Indo-Pacific",
+                                         ecoregions_cropped,bathy_cropped)
+write_csv(depth_Eastern_IndoPac, "file_Eastern_IndoPac.csv")
+
+#### 1.3.2. Extraction of Indo-Pacific Warm Water (15) ####
+# Error message for Indo Pacific Warm Waters and Southern Cold Water:
+#vector memory exhausted (limit reached?),
+# resolved by subsetting the extraction 
+
+Indo <- realm[realm$REALM=="Indo-Pacific Warm Water",]
+Indo1 <- Indo[1:9,]
+extraction_Indo1 <- terra::extract(bathy_cropped, vect(Indo1), exact = F, xy=T)
+extraction_Indo1 <- extraction_Indo1 %>% rename("bathy"="bathymetry_classified3R")
+extraction_Indo1$area <- pixelHeight*2*pi*6378*cos(extraction_Indo1$y*pi/180)/86400
+depth_Indo1 <- tapply(extraction_Indo1$area, extraction_Indo1$bathy,sum)
+depth_Indo1<- as.data.frame(depth_Indo1)
+depth_Indo1$bathy <- as.numeric(rownames(depth_Indo1))
+depth_Indo1 <- depth_Indo1[depth_Indo1$bathy!="NaN",]
+colnames(depth_Indo1) <- c("area_km","bathy")
+
+Indo2 <- Indo[10:13,]
+extraction_Indo2 <- terra::extract(bathy_cropped, vect(Indo2), exact = F, xy=T)
+extraction_Indo2 <- extraction_Indo2 %>% rename("bathy"="bathymetry_classified3R")
+extraction_Indo2$area <- pixelHeight*2*pi*6378*cos(extraction_Indo2$y*pi/180)/86400
+depth_Indo2 <- tapply(extraction_Indo2$area, extraction_Indo2$bathy,sum)
+depth_Indo2<- as.data.frame(depth_Indo2)
+depth_Indo2$bathy <- as.numeric(rownames(depth_Indo2))
+depth_Indo2 <- depth_Indo2[depth_Indo2$bathy!="NaN",]
+colnames(depth_Indo2) <- c("area_km","bathy")
+
+Indo3 <- Indo[14:18,]
+extraction_Indo3 <- terra::extract(bathy_cropped, vect(Indo3), exact = F, xy=T)
+extraction_Indo3 <- extraction_Indo3 %>% rename("bathy"="bathymetry_classified3R")
+extraction_Indo3$area <- pixelHeight*2*pi*6378*cos(extraction_Indo3$y*pi/180)/86400
+depth_Indo3 <- tapply(extraction_Indo3$area, extraction_Indo3$bathy,sum)
+depth_Indo3<- as.data.frame(depth_Indo3)
+depth_Indo3$bathy <- as.numeric(rownames(depth_Indo3))
+depth_Indo3 <- depth_Indo3[depth_Indo3$bathy!="NaN",]
+colnames(depth_Indo3) <- c("area_km","bathy")
+
+depth_realm_Indo <-rbind(depth_Indo1,depth_Indo2,depth_Indo3)
+depth_realm_Indo_final <- data.frame(tapply(depth_realm_Indo$area_km,
+                                               INDEX=depth_realm_Indo$bathy, FUN=sum))
+depth_realm_Indo_final$bathy <- as.numeric(rownames(depth_realm_Indo_final))
+depth_realm_Indo_final$realm <- c("Indo-Pacific Warm Water")
+colnames(depth_realm_Indo_final) <- c("area_km","bathy","realm")
+write_csv(depth_realm_Indo_final,"file_depth_IndoWW_1.2.csv")
+
+#### 1.3.3. Extraction of Southern Cold Water (16) ####
+Southern_Cold <- realm[realm$REALM=="Southern Cold Water",]
+depth_realm_SCold <- data_frame()
+
+for (k in 1:4){
+  SCold <- Southern_Cold[k,]
+  extraction_SCold <- terra::extract(bathy_cropped, vect(SCold), exact = F,xy=T) 
+  extraction_SCold <- extraction_SCold %>% rename("bathy"="bathymetry_classified3R") 
+  extraction_SCold$area <- pixelHeight*2*pi*6378*cos(extraction_SCold$y*pi/180)/86400
+  depth_SCold <- tapply(extraction_SCold$area, extraction_SCold$bathy,sum)
+  depth_SCold<- as.data.frame(depth_SCold)
+  depth_SCold$bathy <- as.numeric(rownames(depth_SCold))
+  depth_SCold <- depth_SCold[depth_SCold$bathy!="NaN",]
+  colnames(depth_SCold) <- c("area_km","bathy")
+  depth_realm_SCold <- rbind(depth_realm_SCold,depth_SCold)
+}
+
+
+depth_realm_SCold_final <- data.frame(tapply(depth_realm_SCold$area_km,
+                                            INDEX=depth_realm_SCold$bathy, FUN=sum))
+depth_realm_SCold_final$bathy <- as.numeric(rownames(depth_realm_SCold_final))
+depth_realm_SCold_final$realm <- c("Southern Cold Water")
+colnames(depth_realm_SCold_final) <- c("area_km","bathy","realm")
+
+write_csv(depth_realm_SCold_final,"file_depth_SCold_1.2.csv")
+#depth_realm_SCold <- read.csv("file_depth_SCold.csv")
+
+#### 1.3.4. Loading all ecoregion files and merging ####
+depth_AtWarm <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_AtWarm_1.2.csv") 
+depth_Arctic <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_Arctic_1.2.csv")
+depth_NorthernCold <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_NorthernCold_1.2.csv")
+depth_Southern_Ocean <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_Southern_Ocean_1.2.csv")
+depth_Temp_Australasia <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_TempAustralasia_1.2.csv")
+depth_Temp_North_Atl <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_Temp_North_Atl_1.2.csv")
+depth_Temp_North_Pac <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_Temp_North_Pac_1.2.csv")
+depth_Temp_South_Am <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_Temp_South_Am_1.2.csv")
+depth_Temp_South_Africa <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_TempSouthAf_1.2.csv")
+depth_Tropical_Atl <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_Tropical_Atl_1.2.csv")
+depth_Tropical_EastPac <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_Tropical_EastPac.csv")
+depth_West_IndoPac <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_West_IndoPac.csv")
+depth_Central_IndoPac <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_Central_IndoPac.csv")
+depth_Eastern_IndoPac <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_Eastern_IndoPac.csv")
+depth_Warm_IndoPac <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_depth_IndoWW_1.2.csv")
+depth_SCold <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_depth_SCold_1.2.csv")
+
+depth_ecoregions <- rbind(depth_AtWarm, depth_Arctic, depth_NorthernCold, depth_Southern_Ocean,
+                          depth_Temp_Australasia,depth_Temp_North_Atl, depth_Temp_North_Pac, depth_Temp_South_Am,
+                          depth_Temp_South_Africa, depth_Tropical_Atl, depth_Tropical_EastPac, depth_West_IndoPac,
+                          depth_Central_IndoPac, depth_Eastern_IndoPac, depth_Warm_IndoPac, depth_SCold)
+#write_csv(depth_ecoregions,"Step3_Ecoregions/Ecoregions1.2/file_depth_ecoregions.csv")
+
+#### 1.3.5. Relative size of 3D realms ####
+ecoregion_depth_summary2$proportion_discrete2 <- factor(ecoregion_depth_summary2$proportion_discrete2,
+                                                        levels=c("1","5","10","30","100.2"))
+ecoregion_depth_summary2$realm <- factor(ecoregion_depth_summary2$realm,
+                                         levels = c("Arctic", "Temperate Northern Atlantic", "Temperate Northern Pacific",
+                                                    "Tropical Atlantic", "Tropical Eastern Pacific", "Western Indo-Pacific",
+                                                    "Central Indo-Pacific", "Eastern Indo-Pacific" , "Temperate Southern Africa",
+                                                    "Temperate South America", "Temperate Australasia", "Southern Ocean",
+                                                    "Northern Cold Water", "Indo-Pacific Warm Water", "Atlantic Warm Water","Southern Cold Water"))
+
+ggplot(data=ecoregion_depth_summary2, aes(x=realm, y=bathy,ymin=-1))+
+  geom_point(position="identity", size=log(as.numeric(ecoregion_depth_summary2$area_3Drealm),base=2)/1.5,
+             shape=21)+
+  scale_fill_manual(values= colors_green,labels = c("≤1","1-5", "5-10", "10-30","≥30"))+
+  theme_classic()+
+  scale_y_discrete(label=str_wrap(rev(c("euphotic","upper mesophotic", "lower mesophotic","rariphotic","upper bathyal",
+                                        "lower bathyal","abyssal","hadal","total")),width=8))+
+  #theme(axis.text.x = element_text(angle = -20))+
+  guides(fill = guide_legend(override.aes = list(size = 10)))+ #increases the size of the points in legend
+  scale_x_discrete(position = "top",labels=function(realm) str_wrap(realm,width=8))+
+  ylab("")+
+  xlab("")+
+  labs(fill="% protected", size="total area (log km2)")+
+  geom_vline(xintercept = 12.5, color = "black", size=0.3,linetype="dashed")
+
+
+#### 2.1.0. Prep table: MPA coverage by depth and ecoregion (file written) ####
+depth_ecoregions <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_depth_ecoregions.csv") # total area
+ecoregion_protected <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_ecoregion_depth_summary2.csv") # area protected
+  ## joining MPA area with ecoregion area 
+ecoregion_depth_summary2 <- left_join(depth_ecoregions,ecoregion_protected, by=c("bathy","realm"="ecoregions"))
+colnames(ecoregion_depth_summary2) <- c("area_3Drealm","bathy","realm","area_protected","area_depth")
+  # NAs coming from left_join correspond to areas with 0 protection coverage 
+ecoregion_depth_summary2$area_protected[which(is.na(ecoregion_depth_summary2$area_protected))] <- 0
+ecoregion_depth_summary2$proportion <- ecoregion_depth_summary2$area_protected/ecoregion_depth_summary2$area_3Drealm*100
+
+#write_csv(ecoregion_depth_summary2, "Step3_Ecoregions/Ecoregions1.2/file_ecoregion_depth_summary2_barplot.csv")
+
+#### 2.2.0. Prep table: for heat map (file written) ####
+depth_ecoregions <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_depth_ecoregions.csv") # total area
+ecoregion_depth_summary2 <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_ecoregion_depth_summary2_barplot.csv") # area protected
+
+ecoregion_depth_summary2 <- ecoregion_depth_summary2
+ecoregion_depth_summary2$bathy <- as.character(ecoregion_depth_summary2$bathy)
+
+  ## calculating the total area protected by realm
+for (k in unique(ecoregion_depth_summary2$realm)){ # loops through realms
+  ecoregion <- ecoregion_depth_summary2[ecoregion_depth_summary2$realm==k,]
+  area_protected <- sum(ecoregion$area_protected) # total protection coverage 
+  area_ecoregion <- sum(ecoregion$area_3Drealm) # total realm area
+  proportion <- area_protected/area_ecoregion*100 # total proportion
+  ecoregion_depth_summary2 <- rbind(ecoregion_depth_summary2,c(as.numeric(area_ecoregion), "total",k,
+                                                               as.numeric(area_protected),NA,as.numeric(proportion)))
+}
+  ## attributing continuous proportion value to discrete intervals
+ecoregion_depth_summary2$bathy <- factor(ecoregion_depth_summary2$bathy,
+                                         levels=rev(c("-30","-60","-150","-300",
+                                                      "-1000","-3500","-6000","-11000","total")))
+
+proportion_breaks <- c(0,2,5,10,20,50,100.2)
+proportion_breaks2 <- c(0,1,5,10,30,100.2)
+ecoregion_depth_summary2$proportion <- as.numeric(ecoregion_depth_summary2$proportion)
+for (k in (1:(length(proportion_breaks)-1))){
+  ecoregion_depth_summary2$proportion_discrete[ecoregion_depth_summary2$proportion>=proportion_breaks[k] &
+                                                 ecoregion_depth_summary2$proportion<proportion_breaks[k+1]] <- proportion_breaks[k+1]
+}
+for (k in (1:(length(proportion_breaks2)-1))){
+  ecoregion_depth_summary2$proportion_discrete2[ecoregion_depth_summary2$proportion>=proportion_breaks2[k] &
+                                                 ecoregion_depth_summary2$proportion<proportion_breaks2[k+1]] <- proportion_breaks2[k+1]
+}
+#write_csv(ecoregion_depth_summary2,"Step3_Ecoregions/Ecoregions1.2/file_ecoregion_depth_summary_heatmap.csv")
+
+  ## checking that we find the same value when summing across ecoregions
+      ## then in the general analysis of protection through depth 
+ecoregion_depth_summary2 <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_ecoregion_depth_summary_heatmap.csv")
+MPA_depth_area <- read_csv("Step1_Map_Processing/10m_land_1.2/file_depth_area_MPA_1.2.csv")
+
+data_check <- ecoregion_depth_summary2 %>%
+  group_by(bathy) %>%
+  summarize(area_protected=sum(area_protected), area_depth=sum(area_3Drealm))
+data_check$proportion <- data_check$area_protected/data_check$area_depth*100
+## values are similar in both analyses! 
+
+#### 2.2.1. Heat maps ####
+ecoregion_depth_summary2 <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_ecoregion_depth_summary_heatmap.csv")
+
+ecoregion_depth_summary2$realm <- factor(ecoregion_depth_summary2$realm,
+                                 levels = c("Arctic", "Temperate Northern Atlantic", "Temperate Northern Pacific",
+                                            "Tropical Atlantic", "Tropical Eastern Pacific", "Western Indo-Pacific",
+                                            "Central Indo-Pacific", "Eastern Indo-Pacific" , "Temperate Southern Africa",
+                                            "Temperate South America", "Temperate Australasia", "Southern Ocean",
+                                            "Northern Cold Water", "Indo-Pacific Warm Water", "Atlantic Warm Water","Southern Cold Water"))
+ecoregion_depth_summary2$bathy <- factor(ecoregion_depth_summary2$bathy,
+                                         levels=rev(c("-30","-60","-150","-300",
+                                                      "-1000","-3500","-6000","-11000","total")))
+
+ecoregion_depth_summary2 <- ecoregion_depth_summary2 %>%
+  arrange(realm)
+
+colors = c("#004616", "#00541F", "#106328", "#1D712F", "#297F36", "#338D3C", "#3D9A42",
+           "#4DA74C", "#63B15F", "#77BC71", "#8AC582", "#9ACE92", "#AAD7A1", "#B9DFB0", 
+           "#C6E6BD", "#D3ECCB", "#DEF2D7", "#E8F6E2", "#F0FAEC", "#F6FBF4")
+colors_green <- colors[seq(1,length(colors),3)]
+colors_green <- colors_green[1:6]
+
+ecoregion_depth_summary2$proportion_discrete2 <- factor(ecoregion_depth_summary2$proportion_discrete2,
+                                                        levels=c("1","5","10","30","100.2"))
+colors_green <- c("white", "#F1F8E9","#C5E1A5","#3D9A42", "#1D712F")
+
+ecoregion_depth_summary2 <- ecoregion_depth_summary2 %>%
+  arrange(realm)
+
+ggplot(data=ecoregion_depth_summary2, aes(x=realm, y=bathy,fill=proportion_discrete2,ymin=-1))+
+  geom_tile(color="grey",size=0.4)+
+  scale_fill_manual(values= colors_green,labels = c("≤1","1-5", "5-10", "10-30","≥30"))+
+  #theme_grey(base_line_size=0,base_size = 13)+
+  theme(axis.text.x = element_text(angle = -90,hjust=1, vjust=0),panel.grid.major = element_blank(),
+        axis.text.y = element_text(size = 14))+
+  guides(fill = guide_legend(override.aes = list(size = 10)))+ #increases the size of the points in legend
+  scale_x_discrete(position = "top",labels=function(realm) str_wrap(c("Arctic", "N Atlantic", "N Pacific",
+                                                                      "Trop. Atlantic", "Trop. E Pacific", "W Indo-Pacific",
+                                                                      "C Indo-Pacific", "E Indo-Pacific" , "S Africa",
+                                                                      "S America", "Australasia", "S Ocean",
+                                                                      "Northern", "Indo-Pacific", "Atlantic","Southern"),width=8))+
+  scale_y_discrete(label=str_wrap(rev(c("euphotic","upper mesophotic", "lower mesophotic","rariphotic","upper bathyal",
+                                        "lower bathyal","abyssal","hadal","total")),width=8))+
+  guides(fill = guide_legend(override.aes = list(colour = "grey")))+ 
+  ylab("")+
+  xlab("")+
+  labs(fill=str_wrap("protection coverage (%)",width=5), size="total area (log km2)")+
+  geom_vline(xintercept = 12.5, color = "black", size=0.3,linetype="dashed")+
+  annotate(geom="text",x=1:16,y=1,
+           label=as.vector(unlist(round(ecoregion_depth_summary2[ecoregion_depth_summary2$bathy=="total","proportion"],0))))
+
+
+#### 2.2.1.4. MPA +OECM with 5 categories of protection level - TILES ####
+#### Data prep ####
+ecoregion_depth_summary2 <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_ecoregion_depth_summary_heatmap.csv")
+OECM_ecoregion <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_OECM_ecoregion.csv")
+OECM_ecoregion$bathy <- as.character(OECM_ecoregion$bathy)
+ABMT_ecoregion <- left_join(ecoregion_depth_summary2,OECM_ecoregion,by=c("bathy"="bathy",'realm'="ecoregion"))
+ABMT_ecoregion$area_OECM[is.na(ABMT_ecoregion$area_OECM)] <- 0
+ABMT_ecoregion$totalprotected <- ABMT_ecoregion$area_protected+ABMT_ecoregion$area_OECM
+ABMT_ecoregion$proportion <- ABMT_ecoregion$totalprotected/ABMT_ecoregion$area_3Drealm*100
+
+ABMT_ecoregion <- ABMT_ecoregion[ABMT_ecoregion$bathy!="total",]
+ABMT_ecoregion <- ABMT_ecoregion[,c("area_3Drealm","bathy","realm","totalprotected","area_depth","proportion")]
+
+## calculating the total area protected by realm
+for (k in unique(ABMT_ecoregion$realm)){ # loops through realms
+  ecoregion <- ABMT_ecoregion[ABMT_ecoregion$realm==k,]
+  area_protected <- sum(as.numeric(ecoregion$totalprotected)) # total protection coverage 
+  area_ecoregion <- sum(as.numeric(ecoregion$area_3Drealm)) # total realm area
+  proportion <- area_protected/area_ecoregion*100 # total proportion
+  ABMT_ecoregion <- rbind(ABMT_ecoregion,c(as.numeric(area_ecoregion), "total",k,
+                                                               as.numeric(area_protected),NA,as.numeric(proportion)))
+}
+
+## discrete categories of protection
+proportion_breaks <- c(0,1,5,10,30,100.2)
+ABMT_ecoregion$proportion <- as.numeric(ABMT_ecoregion$proportion)
+for (k in (1:(length(proportion_breaks)-1))){
+  ABMT_ecoregion$proportion_discrete[ABMT_ecoregion$proportion>=proportion_breaks[k] &
+                                                  ABMT_ecoregion$proportion<proportion_breaks[k+1]] <- proportion_breaks[k+1]
+}
+
+#write_csv(ABMT_ecoregion,"Step3_Ecoregions/Ecoregions1.2/file_ABMT_ecoregion.csv")
+
+#### plot ####
+ABMT_ecoregion <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_ABMT_ecoregion.csv")
+ABMT_ecoregion$realm <- factor(ABMT_ecoregion$realm,
+                                         levels = c("Arctic", "Temperate Northern Atlantic", "Temperate Northern Pacific",
+                                                    "Tropical Atlantic", "Tropical Eastern Pacific", "Western Indo-Pacific",
+                                                    "Central Indo-Pacific", "Eastern Indo-Pacific" , "Temperate Southern Africa",
+                                                    "Temperate South America", "Temperate Australasia", "Southern Ocean",
+                                                    "Northern Cold Water", "Indo-Pacific Warm Water", "Atlantic Warm Water","Southern Cold Water"))
+ABMT_ecoregion$bathy <- factor(ABMT_ecoregion$bathy,
+                                         levels=rev(c("-30","-60","-150","-300",
+                                                      "-1000","-3500","-6000","-11000","total")))
+ABMT_ecoregion$proportion_discrete <- factor(ABMT_ecoregion$proportion_discrete,
+                                                        levels=c("1","5","10","30","100.2"))
+colors_green <- c("white", "#F1F8E9","#C5E1A5","#3D9A42", "#1D712F")
+
+ABMT_ecoregion <- ABMT_ecoregion %>%
+  arrange(realm)
+
+ggplot(data=ABMT_ecoregion, aes(x=realm, y=bathy,fill=proportion_discrete,ymin=-1))+
+  geom_tile(color="grey",size=0.4)+
+  scale_fill_manual(values= colors_green,labels = c("≤1","1-5", "5-10", "10-30","≥30"))+
+  #theme_grey(base_line_size=0,base_size = 13)+
+  theme(panel.grid.major = element_blank(),
+        axis.text.y = element_text(size = 14),axis.text.x = element_text(size = 10))+
+  guides(fill = guide_legend(override.aes = list(size = 10)))+ #increases the size of the points in legend
+  scale_x_discrete(position = "top",labels=function(realm) str_wrap(c("Arctic", "N. Atlantic", "N. Pacific",
+                                                                      "Trop. Atlantic", "Trop. E. Pacific", "W. Indo-Pacific",
+                                                                      "Central Indo-Pacific", "E Indo-Pacific" , "S. Africa",
+                                                                      "S. America", "Austral- asia", "S. Ocean",
+                                                                      "North", "Indo-Pacific", "Atlantic","South"),width=6))+
+  scale_y_discrete(position="left",label=str_wrap(rev(c("euphotic","upper mesophotic", "lower mesophotic","rariphotic","upper bathyal",
+                                        "lower bathyal","abyssal","hadal","total")),width=6))+
+  guides(fill = guide_legend(override.aes = list(colour = "grey")))+ 
+  ylab("")+
+  xlab("")+
+  labs(fill=str_wrap("protection coverage (%)",width=5), size="total area (log km2)")+
+  geom_vline(xintercept = 12.5, color = "black", size=0.3,linetype="dashed")+
+  annotate(geom="text",x=1:16,y=1,
+           label=as.vector(unlist(round(ABMT_ecoregion[ABMT_ecoregion$bathy=="total","proportion"],0))))
+
+
+#### 2.3. Nb of ecoregions per depth with 1% strong protection + graph ####
+proportion_count <- ABMT_ecoregion %>%
+  group_by(bathy,proportion_discrete) %>%
+  summarize(nb=n())
+
+total_count <- ABMT_ecoregion %>%
+  group_by(bathy) %>%
+  summarize(total=n())
+
+CBD5_count$bathy <- factor(CBD5_count$bathy,
+                           levels = rev(c("-30","-60","-150","-300",
+                                          "-1000","-3500","-6000","-11000","total")))
+
+proportion_count$proportion_discrete <- factor(proportion_count$proportion_discrete,
+                                               levels=c(1,5,10,30,100.2))
+proportion_count$bathy <- factor(proportion_count$bathy,
+                                 levels = rev(c("-30","-60","-150","-300",
+                                                "-1000","-3500","-6000","-11000","total")))
+
+colors_green <- c("white", "#F1F8E9","#C5E1A5","#3D9A42", "#1D712F")
+
+ggplot()+
+  geom_bar(data=proportion_count,aes(x=bathy, y=nb,fill=proportion_discrete),
+           position="stack", stat="identity",width=0.65)+
+  scale_fill_manual(values= colors_green,labels = c("≤1","1-5","5-10","10-30","≥30"))+
+  theme_classic()+
+  coord_flip()+
+  geom_bar(data=total_count, mapping=aes(x=bathy,y=total), 
+           position="stack",stat="identity",color="gray", fill="transparent",size=0.2,width=0.65)+
+  scale_y_continuous(position="right", breaks=c(5,10,15))+
+  scale_x_discrete(label=str_wrap(rev(c("euphotic","upper mesophotic", "lower mesophotic","rariphotic","upper bathyal",
+                                                                                                                "lower bathyal","abyssal","hadal","total")),width=6))+
+  ylab("number of ecoregions")+
+  xlab("")
+
+#### 3. ONLY Ia and Ib categories ####
+#### 3.0. File with only Ia and Ib MPAs (file written) ####
+MPA_depth_IUCN_ecoregion <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_MPA_depth_IUCN_ecoregion.csv")
+  ## select IUCN level Ia and Ib 
+MPA_depth_ecoregionI <- MPA_depth_IUCN_ecoregion[MPA_depth_IUCN_ecoregion$IUCN=="Ia" |
+                                                   MPA_depth_IUCN_ecoregion$IUCN=="Ib",]
+MPA_depth_ecoregionI <- MPA_depth_ecoregionI[which(!is.na(MPA_depth_ecoregionI$IUCN)),]
+  ## sum area across depth and ecoregions
+MPA_depth_ecoregionI <- MPA_depth_ecoregionI %>%
+  group_by(ecoregion,bathy) %>%
+  summarize(area=sum(area))
+write.csv(MPA_depth_ecoregionI,"Step3_Ecoregions/Ecoregions1.2/file_MPA_depth_ecoregionI.csv")
+
+#### 3.1. File prep for graph ####
+  ## joining with info on ecoregion areas 
+MPA_depth_ecoregionI <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_MPA_depth_ecoregionI.csv")
+MPA_depth_ecoregionI <- MPA_depth_ecoregionI[,c(2:4)] # getting rid of useless column
+depth_ecoregions <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_depth_ecoregions.csv") # total area
+
+MPA_depth_ecoregionI <- left_join(depth_ecoregions, MPA_depth_ecoregionI, by=c("bathy","realm"="ecoregion"))
+colnames(MPA_depth_ecoregionI) <- c("area_total","bathy","realm","area_protected")
+MPA_depth_ecoregionI$proportion <- MPA_depth_ecoregionI$area_protected/MPA_depth_ecoregionI$area_total*100
+MPA_depth_ecoregionI$area_protected[is.na(MPA_depth_ecoregionI$area_protected)] <- 0
+
+## calculating the total area protected by realm
+for (k in unique(MPA_depth_ecoregionI$realm)){ # loops through realms
+  realm <- MPA_depth_ecoregionI[MPA_depth_ecoregionI$realm==k,]
+  area_protected <- sum(as.numeric(realm$area_protected)) # total protection coverage 
+  area_ecoregion <- sum(as.numeric(realm$area_total)) # total realm area
+  proportion <- area_protected/area_ecoregion*100 # total proportion
+  MPA_depth_ecoregionI <- rbind(MPA_depth_ecoregionI,c(as.numeric(area_ecoregion),"total",k,
+                                                               as.numeric(area_protected), as.numeric(proportion)))
+}
+  ## attributing continuous proportion value to discrete intervals
+MPA_depth_ecoregionI$bathy <- factor(MPA_depth_ecoregionI$bathy,
+                                         levels=rev(c("-30","-60","-150","-300",
+                                                      "-1000","-3500","-6000","-11000","total")))
+
+proportion_breaks <- c(0.1,1,5,10,100)
+MPA_depth_ecoregionI$proportion <- as.numeric(MPA_depth_ecoregionI$proportion)
+MPA_depth_ecoregionI$proportion[which(is.na(MPA_depth_ecoregionI$proportion))] <- 0
+
+for (k in (1:(length(proportion_breaks)-1))){
+  MPA_depth_ecoregionI$proportion_discrete[MPA_depth_ecoregionI$proportion>=proportion_breaks[k] &
+                                             MPA_depth_ecoregionI$proportion<proportion_breaks[k+1]] <- proportion_breaks[k+1]
+}
+MPA_depth_ecoregionI$proportion_discrete[which(is.na(MPA_depth_ecoregionI$proportion_discrete))] <- 0.1
+write.csv(MPA_depth_ecoregionI,"Step3_Ecoregions/Ecoregions1.2/file_MPAI_heatmap.csv")
+
+#### 3.2. IUCN I Heatmaps ####
+MPAI_heatmap <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_MPAI_heatmap.csv")
+
+MPAI_heatmap$realm <- factor(MPAI_heatmap$realm,
+                                         levels = c("Arctic", "Temperate Northern Atlantic", "Temperate Northern Pacific",
+                                                    "Tropical Atlantic", "Tropical Eastern Pacific", "Western Indo-Pacific",
+                                                    "Central Indo-Pacific", "Eastern Indo-Pacific" , "Temperate Southern Africa",
+                                                    "Temperate South America", "Temperate Australasia", "Southern Ocean",
+                                                    "Northern Cold Water", "Indo-Pacific Warm Water", "Atlantic Warm Water","Southern Cold Water"))
+MPAI_heatmap$bathy <- factor(MPAI_heatmap$bathy,
+                                         levels=rev(c("-30","-60","-150","-300",
+                                                      "-1000","-3500","-6000","-11000","total")))
+
+MPAI_heatmap <- MPAI_heatmap %>%
+  arrange(realm)
+
+MPAI_heatmap$proportion_discrete <- factor(MPAI_heatmap$proportion_discrete,
+                                           levels=c("0.1","1","5","10","100"))
+colors_green <- c("white", "#F1F8E9","#C5E1A5","#3D9A42", "#1D712F")
+
+## Version with 5 categories of protection level (bubbles)
+ggplot(data=MPAI_heatmap, aes(x=realm, y=bathy,fill=proportion_discrete,ymin=-1))+
+  geom_point(position="identity", size=log(as.numeric(MPAI_heatmap$area_total),base=2)/1.5,
+             shape=21)+
+  scale_fill_manual(values= colors_green,labels = c("≤0.1", "0.1-1", "1-5","5-10","≥10"))+
+  theme_classic(axis.text.y = element_text(size = 14))+
+  theme(axis.text.x = element_text(angle = -20))+
+  guides(fill = guide_legend(override.aes = list(size = 10)))+ #increases the size of the points in legend
+  scale_x_discrete(position = "top")+
+  ylab("depth")+
+  xlab("")+
+  labs(fill="% protected", size="total area (log km2)")+
+  geom_vline(xintercept = 12.5, color = "black", size=0.3,linetype="dashed")+
+  annotate(geom="text",x=1.1:16.1,y=c(0.2),
+           label=paste(as.vector(unlist(round(MPAI_heatmap[MPAI_heatmap$bathy=="total","proportion"],1))),"%"))
+
+## Version with 5 categories of protection level (tiles)
+ggplot(data=MPAI_heatmap, aes(x=realm, y=bathy,fill=proportion_discrete,ymin=-1))+
+  geom_tile(color="grey",size=0.4)+
+  scale_fill_manual(values= colors_green,labels = c("≤0.1", "0.1-1", "1-5","5-10","≥10"))+
+  theme(panel.grid.major = element_blank(),
+        axis.text.y = element_text(size = 14))+
+  guides(fill = guide_legend(override.aes = list(size = 10)))+ #increases the size of the points in legend
+  scale_x_discrete(position = "top",labels=function(realm) str_wrap(c("Arctic", "N. Atlantic", "N. Pacific",
+                                                                      "Trop. Atlantic", "Trop. E. Pacific", "W. Indo-Pacific",
+                                                                      "Central Indo-Pacific", "E Indo-Pacific" , "S. Africa",
+                                                                      "S. America", "Australasia", "S. Ocean",
+                                                                      "Northern", "Indo-Pacific", "Atlantic","Southern"),width=8))+
+  scale_y_discrete(label=str_wrap(rev(c("euphotic","upper mesophotic", "lower mesophotic","rariphotic","upper bathyal",
+                               "lower bathyal","abyssal","hadal","total")),width=8))+
+  guides(fill = guide_legend(override.aes = list(colour = "grey")))+ 
+  ylab("")+
+  xlab("")+
+  labs(fill="% protected", size="total area (log km2)")+
+  geom_vline(xintercept = 12.5, color = "black", size=0.3,linetype="dashed")+
+  annotate(geom="text",x=1:16,y=1,
+           label=as.vector(unlist(round(MPAI_heatmap[MPAI_heatmap$bathy=="total","proportion"],0))))
+
+
+#### 3.3. Stacked barplot of # ecoregions in each proportion category  ####
+
+total_count <- MPA_depth_ecoregionI %>%
+  filter(area_total>10) %>%
+  group_by(bathy) %>%
+  summarize(total=n())
+
+total_count$bathy <- factor(total_count$bathy,
+                            levels = rev(c("-30","-60","-150","-300",
+                                           "-1000","-3500","-6000","-11000","total")))
+
+
+proportion_count <- MPA_depth_ecoregionI %>%
+  filter(area_total>10) %>%
+  group_by(bathy,proportion_discrete) %>%
+  summarize(nb=n())
+
+proportion_count$proportion_discrete <- factor(proportion_count$proportion_discrete,
+                                                  levels=c(0.1,1,5,10,100))
+proportion_count$bathy <- factor(proportion_count$bathy,
+                            levels = rev(c("-30","-60","-150","-300",
+                                           "-1000","-3500","-6000","-11000","total")))
+
+colors_green <- c("white", "#F1F8E9","#C5E1A5","#3D9A42", "#1D712F")
+
+ggplot()+
+  geom_bar(data=proportion_count,aes(x=bathy, y=nb,fill=proportion_discrete),
+           position="stack", stat="identity",width=0.65)+
+  scale_fill_manual(values= colors_green,labels = c("≤0.1", "0.1-1", "1-5","5-10","≥10"))+
+  theme_classic()+
+  coord_flip()+
+  geom_bar(data=total_count, mapping=aes(x=bathy,y=total), 
+           position="stack",stat="identity",color="gray", fill="transparent",size=0.2,width=0.65)+
+  scale_y_continuous(position="right", breaks=c(5,10,15))+
+  ylab("# realms")+
+  scale_x_discrete(label=str_wrap(rev(c("euphotic","upper mesophotic", "lower mesophotic","rariphotic","upper bathyal",
+                                        "lower bathyal","abyssal","hadal","total")),width=6))+
+  ylab("number of ecoregions")+
+  xlab("")
+  
+#### 3.4. Nb of depth per ecoregion with 1% strong protection + graph ####
+MPA_depth_ecoregionI <-read_csv("Step3_Ecoregions/Ecoregions1.2/file_MPAI_heatmap.csv")
+proportion_count <- MPA_depth_ecoregionI %>%
+  filter(area_total>10) %>%
+  group_by(realm,proportion_discrete) %>%
+  summarize(nb=n())
+
+total_count <- MPA_depth_ecoregionI %>%
+  filter(area_total>10) %>%
+  group_by(realm) %>%
+  summarize(total=n())
+
+
+proportion_count$proportion_discrete <- factor(proportion_count$proportion_discrete,
+                                                levels=c("0.1",'1',"5","10","100"))
+proportion_count$realm <- factor(proportion_count$realm,
+                                 levels = c("Arctic", "Temperate Northern Atlantic", "Temperate Northern Pacific",
+                                            "Tropical Atlantic", "Tropical Eastern Pacific", "Western Indo-Pacific",
+                                            "Central Indo-Pacific", "Eastern Indo-Pacific" , "Temperate Southern Africa",
+                                            "Temperate South America", "Temperate Australasia", "Southern Ocean",
+                                            "Northern Cold Water", "Indo-Pacific Warm Water", "Atlantic Warm Water","Southern Cold Water"))
+total_count$realm <- factor(total_count$realm,
+                                 levels = c("Arctic", "Temperate Northern Atlantic", "Temperate Northern Pacific",
+                                            "Tropical Atlantic", "Tropical Eastern Pacific", "Western Indo-Pacific",
+                                            "Central Indo-Pacific", "Eastern Indo-Pacific" , "Temperate Southern Africa",
+                                            "Temperate South America", "Temperate Australasia", "Southern Ocean",
+                                            "Northern Cold Water", "Indo-Pacific Warm Water", "Atlantic Warm Water","Southern Cold Water"))
+
+colors_green <- c("white", "#F1F8E9","#C5E1A5","#3D9A42", "#1D712F")
+
+ggplot()+
+  geom_bar(data=proportion_count,aes(x=realm, y=nb,fill=proportion_discrete),
+           position="stack", stat="identity",width=0.65)+
+  scale_fill_manual(values= colors_green,labels = c("≤0.1","0.1-1","1-5", "5-10","≥10"))+
+  theme_classic()+
+  #coord_flip()+
+  geom_bar(data=total_count, mapping=aes(x=realm,y=total), 
+           position="stack",stat="identity",color="gray", fill="transparent",size=0.2,width=0.65)+
+  scale_x_discrete(position="top")+
+  scale_y_reverse(breaks=c(2,4,6,8))+
+  ylab("# depth")
+
+#### Density plot 
+MPAI_heatmap <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_MPAI_heatmap.csv")
+MPAI_heatmap$bathy <- factor(MPAI_heatmap$bathy,
+                             levels=c("-30","-60","-150","-300",
+                                          "-1000","-3500","-6000","-11000","total"))
+ggplot(data=MPAI_heatmap, aes(x=bathy, y=proportion))+
+  geom_boxplot()+
+  scale_y_sqrt(breaks=c(1,5,25,100))
+
+ggplot(data=MPAI_heatmap, aes(x=bathy, y=proportion))+
+  geom_violin()+
+  scale_y_sqrt()
+
+#### 3.4. Correlation between high protection and total protection ####
+MPAI_heatmap <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_MPAI_heatmap.csv")
+allMPA_heatmap <- read_csv("Step3_Ecoregions/Ecoregions1.2/file_ecoregion_depth_summary2_heatmap.csv")
+
+correlation_table <- left_join(MPAI_heatmap,allMPA_heatmap, by=c("bathy","realm"), 
+                               suffix=c(".I",".all"))
+
+## testing normality
+shapiro.test(correlation_table$proportion.I) # pvalue< 0.001, not normaly distributed 
+shapiro.test(correlation_table$proportion.all) # pvalue< 0.001, not normaly distributed 
+
+## testing correlation
+cor.test(correlation_table$proportion.I, correlation_table$proportion.all,  method="kendall")
+## correlation coefficient of 0.31. p value < 0.0001 
+
+

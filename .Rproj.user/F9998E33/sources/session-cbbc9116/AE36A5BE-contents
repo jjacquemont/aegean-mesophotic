@@ -1,0 +1,1027 @@
+library(tidyverse)
+library(ggplot2)
+#remotes::install_github("ropensci/rfishbase")
+library(rfishbase)
+library(dplyr)
+library(FD)
+library(fishualize)
+library(mgcv) #gam model
+library(marginaleffects) #visualize gam outputs
+library(modelr) #data manipulation such as data_grid
+library(ggpubr) #combining ggplot figures
+library(viridis)
+
+#remotes::install_github("ropensci/rredlist")
+library(rredlist)
+
+## Raw file that I am using is "file.all.fish.to.2024.csv", which
+# is a compilation of raw fish observations from the four study sites until 2024 fieldworks.
+# Compared to 2024 publication, I replaced 
+    # St. Eustatius by Statia,
+    # Chromis enchrysura by Chromis vanbebberae,
+    # Chromis cyanea and Chromis multilineata by Azurina cyanea / multilineata 
+    # and adding shallow observations in Curacao and Bonaire 
+        # + additional sub observations in Curacao from 2023/2024 trips
+
+#### 1. Computing CWM for each trait ####
+traits.all <- read.csv("file.functional.traits.csv") %>%
+  select(-source)
+
+## each binary variable is attributed the weight 1/(total binary variable) 
+# needed to reclassify trait i
+trait.weights <- c(rep(1/5,5), # size
+                   rep(1/8,8), # trophic categories
+                   rep(1/9,9), # diets
+                   rep(1/4,4), # water position
+                   rep(1/4,4), # repro mode
+                   rep(1/4,4), # mobility
+                   rep(1/5,5),# gregariousness
+                   rep(1/4,4)) # diel activity
+
+#### 1.1. FD Curacao ####
+cur.com <- read.csv("file.all.fish.to.2024.csv")  %>%
+  select(species.traits,dband,location,abu.corr) %>%
+  filter(location == "Curacao") %>%
+  group_by(species.traits, dband) %>%
+  summarize(abundance = sqrt(sum(abu.corr))) %>%
+  spread(species.traits, abundance, fill =  0) %>%
+  as.data.frame()
+
+rownames(cur.com) <- cur.com$dband
+cur.com.cl <- cur.com[-1]
+
+cur.names <- data.frame("species.traits" = colnames(cur.com.cl)) 
+cur.traits <- cur.names %>%
+  left_join(traits.all) %>%
+  select(-species) 
+
+rownames(cur.traits) = cur.traits$species.traits
+cur.traits.rn <- cur.traits[-1]
+
+## name check
+data.frame("colnames" = colnames(cur.com.cl), "rownames" = cur.traits$species.traits) %>%
+  mutate(namecheck = case_when(colnames == rownames ~ "TRUE",
+                               TRUE ~ "FALSE")) %>%
+  filter(namecheck==FALSE)
+
+## functional diversity metrics
+# NB: nb of PCoA axes is 3 max because some communities have only 4 species
+fd.cur <- dbFD(cur.traits.rn, cur.com.cl, w = trait.weights, w.abun = TRUE, m = 3,
+               CWM.type = "all", # returns abundance of each trait class as opposed 
+                                    #to just the dominant class if "dom" was selected
+               corr = "cailliez", stand.FRic = TRUE)
+
+#### 1.2. FD Bonaire ####
+bon.com <- read.csv("file.all.fish.to.2024.csv") %>%
+  select(species.traits,dband,location,abu.corr) %>%
+  filter(location == "Bonaire") %>%
+  mutate(dband.grouped = case_when(dband >= 190 & dband <= 200 ~ 200,
+                                   dband >= 220 & dband <= 250 ~ 240,
+                                   dband >= 280 & dband <= 300 ~ 290,
+                                   TRUE ~ dband)) %>%
+  group_by(species.traits, dband.grouped) %>%
+  summarize(abundance = sqrt(sum(abu.corr))) %>%
+  spread(species.traits, abundance, fill =  0) %>%
+  as.data.frame()
+
+
+rownames(bon.com) <- bon.com$dband.grouped
+bon.com.cl <- bon.com[-1]
+
+bon.names <- data.frame("species.traits" = colnames(bon.com.cl)) 
+bon.traits <- bon.names %>%
+  left_join(traits.all) %>%
+  select(-species) 
+
+rownames(bon.traits) = bon.traits$species.traits
+bon.traits.rn <- bon.traits[-1]
+
+## name check
+data.frame("colnames" = colnames(bon.com.cl), "rownames" = bon.traits$species.traits) %>%
+  mutate(namecheck = case_when(colnames == rownames ~ "TRUE",
+                               TRUE ~ "FALSE"))%>%
+  filter(namecheck==FALSE)
+
+## functional diversity metrics
+fd.bon <- dbFD(bon.traits.rn, bon.com.cl, w = trait.weights, w.abun = TRUE,
+               CWM.type = "all", m =2, corr = "cailliez", stand.FRic = TRUE)
+
+
+
+#### 1.3. FD Roatan ####
+roa.com <- read.csv("file.all.fish.to.2024.csv") %>%
+  select(species.traits,dband,location,abu.corr) %>%
+  filter(location == "Roatan") %>%
+  mutate(dband.grouped = case_when(dband >= 310 & dband <= 330 ~ 320,
+                                   dband >= 340 & dband <= 360 ~ 350,
+                                   dband >= 370 & dband <= 390 ~ 380,
+                                   dband >= 400 & dband <= 420 ~ 410,
+                                   dband >= 430 & dband <= 450 ~ 440,
+                                   dband >= 460 & dband <= 480 ~ 470,
+                                   TRUE ~ dband)) %>%
+  group_by(species.traits, dband.grouped) %>%
+  summarize(abundance = sqrt(sum(abu.corr))) %>%
+  spread(species.traits, abundance, fill =  0) %>%
+  as.data.frame()
+
+rownames(roa.com) <- roa.com$dband.grouped
+roa.com.cl <- roa.com[-1]
+
+roa.names <- data.frame("species.traits" = colnames(roa.com.cl)) 
+roa.traits <- roa.names %>%
+  left_join(traits.all) %>%
+  select(-species)
+
+rownames(roa.traits) = roa.traits$species.traits
+roa.traits.rn <- roa.traits[-1]
+
+rowSums(roa.com.cl)
+roa.namecheck <- data.frame("colnames" = colnames(roa.com.cl), "rownames" = roa.traits$species.traits) %>%
+  mutate(namecheck = case_when(colnames == rownames ~ "TRUE",
+                               TRUE ~ "FALSE"))
+
+fd.roa <- dbFD(roa.traits.rn, roa.com.cl, w = trait.weights, w.abun = TRUE, m = 3, CWM.type = "all", corr = "cailliez", stand.FRic = TRUE)
+
+
+#### 1.4. FD Statia ####
+sta.com <- read.csv("file.all.fish.to.2024.csv") %>%
+  select(species.traits,dband,location,abu.corr) %>%
+  filter(location == "Statia") %>%
+  mutate(dband.grouped = case_when(dband >= 240 & dband <= 270 ~ 260,
+                                   TRUE ~ dband)) %>%
+  group_by(species.traits, dband.grouped) %>%
+  summarize(abundance = sqrt(sum(abu.corr))) %>%
+  spread(species.traits, abundance, fill =  0) %>%
+  as.data.frame()
+
+rownames(sta.com) <- sta.com$dband.grouped
+sta.com.cl <- sta.com[-1]
+
+sta.names <- data.frame("species.traits" = colnames(sta.com.cl)) 
+sta.traits <- sta.names %>%
+  left_join(traits.all) %>%
+  select(-species) 
+
+rownames(sta.traits) = sta.traits$species.traits
+sta.traits.rn <- sta.traits[-1]
+
+sta.namecheck <- data.frame("colnames" = colnames(sta.com.cl), "rownames" = sta.traits$species.traits) %>%
+  mutate(namecheck = case_when(colnames == rownames ~ "TRUE",
+                               TRUE ~ "FALSE"))
+
+fd.sta <- dbFD(sta.traits.rn, sta.com.cl, w = trait.weights, w.abun = TRUE, m = 3, 
+               CWM.type = "all", corr = "cailliez", stand.FRic = TRUE)
+
+#### 2. Community weighted means ####
+#### 2.1. Curacao ####
+cur.cwms <- fd.cur$CWM %>%
+  select_if(stringr::str_detect(names(.), "_1"))
+
+cur.cwm.size <- cur.cwms %>%
+  select(contains("size")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(cur.com.cl)),
+         "location" = "Curacao") %>%
+  relocate(dband, location) 
+
+cur.cwm.trophic <- cur.cwms %>%
+  select(contains("trophic")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(cur.com.cl)),
+         "location" = "Curacao") %>%
+  relocate(dband, location)
+
+cur.cwm.diet <- cur.cwms %>%
+  select(contains("diet")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(cur.com.cl)),
+         "location" = "Curacao") %>%
+  relocate(dband, location)
+
+cur.cwm.position <- cur.cwms %>%
+  select(contains("position")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(cur.com.cl)),
+         "location" = "Curacao") %>%
+  relocate(dband, location)
+
+cur.cwm.repro <- cur.cwms %>%
+  select(contains("repro")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(cur.com.cl)),
+         "location" = "Curacao") %>%
+  relocate(dband, location)
+
+cur.cwm.mobility <- cur.cwms %>%
+  select(contains("mobility")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(cur.com.cl)),
+         "location" = "Curacao") %>%
+  relocate(dband, location)
+
+cur.cwm.activity <- cur.cwms %>%
+  select(contains("activity")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(cur.com.cl)),
+         "location" = "Curacao") %>%
+  relocate(dband, location)
+
+cur.cwm.gregariousness <- cur.cwms %>%
+  select(contains("greg")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(cur.com.cl)),
+         "location" = "Curacao") %>%
+  relocate(dband, location)
+
+#### 2.2. Bonaire ####
+bon.cwms <- fd.bon$CWM %>%
+  select_if(stringr::str_detect(names(.), "_1"))
+
+bon.cwm.size <- bon.cwms %>%
+  select(contains("size")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(bon.com.cl)),
+         "location" = "Bonaire") %>%
+  relocate(dband, location)
+bon.cwm.trophic <- bon.cwms %>%
+  select(contains("trophic")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(bon.com.cl)),
+         "location" = "Bonaire") %>%
+  relocate(dband, location)
+bon.cwm.diet <- bon.cwms %>%
+  select(contains("diet")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(bon.com.cl)),
+         "location" = "Bonaire") %>%
+  relocate(dband, location)
+bon.cwm.position <- bon.cwms %>%
+  select(contains("position")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(bon.com.cl)),
+         "location" = "Bonaire") %>%
+  relocate(dband, location)
+bon.cwm.repro <- bon.cwms %>%
+  select(contains("repro")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(bon.com.cl)),
+         "location" = "Bonaire") %>%
+  relocate(dband, location)
+
+bon.cwm.mobility <- bon.cwms %>%
+  select(contains("mobility")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(bon.com.cl)),
+         "location" = "Bonaire") %>%
+  relocate(dband, location)
+
+bon.cwm.activity <- bon.cwms %>%
+  select(contains("activity")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(bon.com.cl)),
+         "location" = "Bonaire") %>%
+  relocate(dband, location)
+
+bon.cwm.gregariousness <- bon.cwms %>%
+  select(contains("greg")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(bon.com.cl)),
+         "location" = "Bonaire") %>%
+  relocate(dband, location)
+
+#### 2.3 Roatan ####
+
+roa.cwms <- fd.roa$CWM %>%
+  select_if(stringr::str_detect(names(.), "_1"))
+roa.cwm.size <- roa.cwms %>%
+  select(contains("size")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(roa.com.cl)),
+         "location" = "Roatan") %>%
+  relocate(dband, location)
+roa.cwm.trophic <- roa.cwms %>%
+  select(contains("trophic")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(roa.com.cl)),
+         "location" = "Roatan") %>%
+  relocate(dband, location)
+roa.cwm.diet <- roa.cwms %>%
+  select(contains("diet")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(roa.com.cl)),
+         "location" = "Roatan") %>%
+  relocate(dband, location)
+roa.cwm.position <- roa.cwms %>%
+  select(contains("position")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(roa.com.cl)),
+         "location" = "Roatan") %>%
+  relocate(dband, location)
+roa.cwm.repro <- roa.cwms %>%
+  select(contains("repro")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(roa.com.cl)),
+         "location" = "Roatan") %>%
+  relocate(dband, location)
+
+roa.cwm.mobility <- roa.cwms %>%
+  select(contains("mobility")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(roa.com.cl)),
+         "location" = "Roatan") %>%
+  relocate(dband, location)
+
+roa.cwm.activity <- roa.cwms %>%
+  select(contains("activity")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(roa.com.cl)),
+         "location" = "Roatan") %>%
+  relocate(dband, location)
+
+roa.cwm.gregariousness <- roa.cwms %>%
+  select(contains("greg")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(roa.com.cl)),
+         "location" = "Roatan") %>%
+  relocate(dband, location)
+
+#### 2.4. Statia ####
+sta.cwms <- fd.sta$CWM %>%
+  select_if(stringr::str_detect(names(.), "_1"))
+
+sta.cwm.size <- sta.cwms %>%
+  select(contains("size")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(sta.com.cl)),
+         "location" = "Statia") %>%
+  relocate(dband, location)
+
+
+sta.cwm.trophic <- sta.cwms %>%
+  select(contains("trophic")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(sta.com.cl)),
+         "location" = "Statia") %>%
+  relocate(dband, location)
+
+sta.cwm.diet <- sta.cwms %>%
+  select(contains("diet")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(sta.com.cl)),
+         "location" = "Statia") %>%
+  relocate(dband, location)
+sta.cwm.position <- sta.cwms %>%
+  select(contains("position")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(sta.com.cl)),
+         "location" = "Statia") %>%
+  relocate(dband, location)
+
+sta.cwm.repro <- sta.cwms %>%
+  select(contains("repro")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(sta.com.cl)),
+         "location" = "Statia") %>%
+  relocate(dband, location)
+
+sta.cwm.mobility <- sta.cwms %>%
+  select(contains("mobility")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(sta.com.cl)),
+         "location" = "Statia") %>%
+  relocate(dband, location)
+
+sta.cwm.activity <- sta.cwms %>%
+  select(contains("activity")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(sta.com.cl)),
+         "location" = "Statia") %>%
+  relocate(dband, location)
+
+sta.cwm.gregariousness <- sta.cwms %>%
+  select(contains("greg")) %>%
+  mutate(across(where(is.character), as.numeric)) %>%
+  mutate("dband" = as.numeric(rownames(sta.com.cl)),
+         "location" = "Statia") %>%
+  relocate(dband, location)
+
+#### 3. Variation of traits with depth ####
+#### 3.1. Size at maturity ####
+cwm.size <- bind_rows(cur.cwm.size, bon.cwm.size, roa.cwm.size, sta.cwm.size) %>%
+  select_if(negate(function(col) is.numeric(col) && sum(col) == 0)) %>% #remove category with no instances, not the case for size
+  gather(3:7, key = "sizeclass", value = "cwm") %>% # changes the format of the table by shortening it
+  mutate(sizeclass = str_remove(sizeclass, "size_"))%>%
+  mutate(sizeclass = as.factor(str_remove(sizeclass, "_1")))%>% 
+  mutate(sizeclass.reord = recode(sizeclass, l = 4, m = 3, s = 2, xl = 5, xs = 1)) 
+
+## trial with only one size class (medium)
+cwm.size.m.gam <- gam(cwm ~ s(dband)+location*dband, 
+                    family = betar, # beta regression model, for proportion data
+                    data = cwm.size %>%
+                      filter(sizeclass=="m"), 
+                    method = "REML") # used for small datasets to avoid overfitting
+summary(cwm.size.m.gam) 
+
+## trial with only one size class (extra small)
+cwm.size.xs.gam <- gam(cwm ~ s(dband)+location*dband, 
+                      family = betar, # beta regression model, for proportion data
+                      data = cwm.size %>%
+                        filter(sizeclass=="xs"), 
+                      method = "REML") # used for small datasets to avoid overfitting
+summary(cwm.size.xs.gam) 
+
+plot_predictions(cwm.size.xs.gam, condition=c('dband','location'), 
+                 type='response', points=0.5,# adds data point to graph
+                 rug=T)
+
+## stacked barplot by abundance
+cwm.size.barplot <- cwm.size %>%
+  mutate(dband=factor(dband,levels=sort(unique(cwm.size$dband))))
+
+size.plot <- ggplot(cwm.size.barplot, aes(x = dband, y = cwm)) +
+  geom_bar(position="fill",stat="identity",
+           aes(fill=forcats::fct_reorder(sizeclass, sizeclass.reord)))+
+  scale_fill_fish_d(option = "Centropyge_loricula") +
+  scale_x_discrete(breaks=c("0","50","100","150","200","250","300","350","410","470"))+
+  theme_classic()+
+  ggtitle("size")+
+  labs(fill="")+
+  ylab("frequency")+
+  xlab("depth (m)")
+size.plot 
+
+
+
+#### 3.2. Trophic level ####
+cwm.trophic <- bind_rows(cur.cwm.trophic, bon.cwm.trophic, roa.cwm.trophic, sta.cwm.trophic) %>%
+  select_if(negate(function(col) is.numeric(col) && sum(col) == 0)) %>%
+  #filter(dband > 40 & dband <= 300) %>%
+  gather(3:9, key = "trophic", value = "cwm") %>%
+  mutate(trophic = str_remove(trophic, "trophic_"))%>%
+  mutate(trophic = as.factor(str_remove(trophic, "_1")))
+#write.csv(cwm.trophic,"data-GAM-trophic.csv")
+
+cwm.trophic.gam <- gam(cwm ~ s(dband, by = trophic), bs = "cs", family = betar, data = cwm.trophic, method = "REML")
+summary(cwm.trophic.gam)
+
+trophic.pred.beta.new <- cwm.trophic %>%
+  data_grid(dband = seq(40,300,1),
+            trophic = cwm.trophic$trophic)
+
+trophic.pred.beta <- data.frame(predict(cwm.trophic.gam, trophic.pred.beta.new, se.fit = TRUE)) %>%
+  add_column(dband = trophic.pred.beta.new$dband) %>%
+  add_column(trophic = trophic.pred.beta.new$trophic) %>%
+  mutate(lci = fit-1.96*se.fit,
+         uci = fit+1.96*se.fit) %>%
+  mutate(pred.cwm = boot::inv.logit(fit), pred.lci = boot::inv.logit(lci), 
+         pred.uci = boot::inv.logit(uci)) #converts log-odds (logits) back to probabilities
+
+ggplot(trophic.pred.beta, aes(x = dband, y = pred.cwm)) +
+  geom_point(cwm.trophic,mapping=aes(group = trophic,
+                                  x=dband,y=cwm,shape=location,
+                                  color = trophic), size=0.7,alpha=0.8)+
+  geom_line(aes(group = trophic, color = trophic), lty = 1, lwd = 0.5) +
+  geom_ribbon(aes(ymin = pred.lci, ymax = pred.uci, group = trophic, fill = trophic), alpha = 0.1) +
+  scale_color_fish_d(option = "Centropyge_loricula") +
+  scale_fill_fish_d(option = "Centropyge_loricula") +
+  theme(legend.title = element_blank())+
+  scale_x_continuous(limits = c(40, 300))+
+  theme_classic()
+
+## stacked barplot
+cwm.trophic.barplot <- cwm.trophic %>%
+  mutate(dband=factor(dband,levels=sort(unique(cwm.trophic$dband))))
+
+trophic.plot <- ggplot(cwm.trophic.barplot, aes(x = dband, y = cwm)) +
+  geom_bar(position="fill",stat="identity",
+           aes(fill=trophic))+
+  scale_fill_fish_d(option = "Centropyge_loricula") +
+  theme_classic()+
+  ggtitle("Trophic level")+
+  labs(fill="")+
+  scale_x_discrete(breaks=c("0","50","100","150","200","250","300","350","410","470"))+
+  ylab("frequency") 
+trophic.plot  
+
+#### 3.3 Diet ####
+cwm.diet <- bind_rows(cur.cwm.diet, bon.cwm.diet, roa.cwm.diet, sta.cwm.diet) %>%
+  mutate(across(everything(), ~replace_na(., 0))) %>%
+  gather(3:11, key = "diet", value = "cwm") %>%
+  mutate(diet = str_remove(diet, "diet_")) %>%
+  mutate(diet = factor(str_remove(diet, "_1"),
+                          levels=rev(c("Benthic.macroalgae",
+                                       "Benthic.microalgae",
+                                       "Detritus","Zooplankton","Ectoparasites",
+                                       "Hard.corals","MobileBenthicInverts","SessileInverts",
+                                       "Bony.fishes"))))
+
+## stacked barplot
+colors=rev(c("black","#3cb464", "#9bddb1",
+                    "#777098","#143896",
+                    "#ebdbfd","#EBC662","#DD5236","#d48c84","#832824"))
+                    
+
+cwm.diet.barplot <- cwm.diet %>%
+  mutate(dband=factor(dband,levels=sort(unique(cwm.diet$dband))))
+
+diet.plot <- ggplot(cwm.diet.barplot, aes(x = dband, y = cwm)) +
+  geom_bar(position="fill",stat="identity", #color="black",
+           aes(fill=diet))+
+  scale_fill_manual(values=colors)+
+  scale_x_discrete(breaks=c("0","50","100","150","200","250","300","350","410","470"))+
+  theme_classic()+
+  ggtitle("diet")+
+  labs(fill="")+
+  ylab("frequency") 
+diet.plot  
+
+
+##--GAM---------------------------
+cwm.diet.gam <- gam(cwm ~ s(dband, by = diet), bs = "cs", family = betar, data = cwm.diet, method = "REML")
+summary(cwm.diet.gam)
+
+## herbivores
+cwm.herbivores.gam <- gam(cwm ~ s(dband)+location*dband, 
+                      family = betar, # beta regression model, for proportion data
+                      data = cwm.diet %>%
+                        filter(diet=="Benthic.macroalgae"|diet=="Benthic.microalgae") %>%
+                        group_by(dband,location)%>%
+                        summarize(cwm=sum(cwm)), 
+                      method = "REML") # used for small datasets to avoid overfitting
+summary(cwm.herbivores.gam) 
+
+plot_predictions(cwm.herbivores.gam, condition=c('dband','location'), 
+                 type='response', points=0.5,# adds data point to graph
+                 rug=T)
+
+#### 3.4. Water column position ####
+cwm.position <- bind_rows(cur.cwm.position, bon.cwm.position, roa.cwm.position, sta.cwm.position) %>%
+  mutate(across(everything(), ~replace_na(., 0))) %>%
+  gather(3:6, key = "position", value = "cwm") %>%
+  mutate(position = str_remove(position, "position_")) %>%
+  mutate(position = factor(str_remove(position, "_1"),
+                           levels=c("Bottom","Near.Bottom","Mid.Water","Near.Surface")))
+#.--GAM ---------------------------------
+## for bottom only
+cwm.bottom.gam <- gam(cwm ~ s(dband)+location*dband, 
+                      family = betar, # beta regression model, for proportion data
+                      data = cwm.position %>%
+                        filter(position=="Bottom"), 
+                      method = "REML") # used for small datasets to avoid overfitting
+summary(cwm.size.m.gam) 
+
+plot_predictions(cwm.bottom.gam, condition=c('dband','location'), 
+                 type='response', points=0.5,# adds data point to graph
+                 rug=T)
+
+#.-- stacked barplot ##---------------------------------
+cwm.position.barplot <- cwm.position %>%
+  mutate(dband=factor(dband,levels=sort(unique(cwm.position$dband))))
+
+position.plot <- ggplot(cwm.position.barplot, aes(x = dband, y = cwm)) +
+  geom_bar(position="fill",stat="identity",
+           aes(fill=position))+
+  scale_fill_manual(values=rev(c("black","#143896","#F6C956","#842724")))+
+  theme_classic()+
+  ggtitle("position")+
+  labs(fill="")+
+  scale_x_discrete(breaks=c("0","50","100","150","200","250","300","350","410","470"))+
+  ylab("frequency") 
+position.plot 
+
+#### 3.5. Reproduction ####
+cwm.repro <- bind_rows(cur.cwm.repro, bon.cwm.repro, roa.cwm.repro, sta.cwm.repro) %>%
+  select_if(negate(function(col) is.numeric(col) && sum(col) == 0)) %>%
+  gather(3:6, key = "repro", value = "cwm") %>%
+  mutate(repro = str_remove(repro, "repro_"))%>%
+  mutate(repro = as.factor(str_remove(repro, "_1")))
+
+cwm.repro.gam <- gam(cwm ~ s(dband, by = repro), bs = "cs", family = betar, 
+                     data = cwm.repro, method = "REML")
+summary(cwm.repro.gam)
+
+## benthic eggs
+cwm.benthiceggs.gam <- gam(cwm ~ s(dband)+location*dband, 
+                          family = betar, # beta regression model, for proportion data
+                          data = cwm.repro %>%
+                            filter(repro=="benthic.eggs") %>%
+                            group_by(dband,location)%>%
+                            summarize(cwm=sum(cwm)), 
+                          method = "REML") # used for small datasets to avoid overfitting
+summary(cwm.benthiceggs.gam) 
+
+#png("Fig.SB.5.png", width = 1600, height = 1200) 
+plot_predictions(cwm.benthiceggs.gam, condition=c('dband','location'), 
+                 type='response', points=0.5,# adds data point to graph
+                 rug=T)
+#dev.off()
+
+## stacked barplot
+cwm.repro.barplot <- cwm.repro %>%
+  mutate(dband=factor(dband,levels=sort(unique(cwm.repro$dband))))
+
+repro.plot <- ggplot(cwm.repro.barplot, aes(x = dband, y = cwm)) +
+  geom_bar(position="fill",stat="identity",
+           aes(fill=repro))+
+  scale_fill_fish_d(option = "Centropyge_loricula",end=0.8) + 
+  theme_classic()+
+  theme(plot.title = element_text(size = 10),
+        plot.margin=margin(1,1,1,1))+
+  ggtitle("reproduction")+
+  labs(fill="")+
+  scale_x_discrete(breaks=c("0","50","100","150","200","250","300","350","410","470"))+
+  ylab("frequency") 
+repro.plot  
+
+#### 3.6. Mobility ####
+cwm.mobility <- bind_rows(cur.cwm.mobility, bon.cwm.mobility, roa.cwm.mobility, sta.cwm.mobility) %>%
+  select_if(negate(function(col) is.numeric(col) && sum(col) == 0)) %>%
+  gather(3:6, key = "mobility", value = "cwm") %>%
+  mutate(mobility = str_remove(mobility, "mobility_"))%>%
+  mutate(mobility = factor(str_remove(mobility, "_1"),
+                              levels=rev(c("sedentary","within.reef.mob","between.reef.mob","vertical.mob"))))
+
+#--GAM-----------------
+## sedentary
+cwm.sedentary.gam <- gam(cwm ~ s(dband)+location*dband, 
+                           family = betar, # beta regression model, for proportion data
+                           data = cwm.mobility %>%
+                             filter(mobility=="sedentary") %>%
+                             group_by(dband,location), 
+                           method = "REML") # used for small datasets to avoid overfitting
+summary(cwm.sedentary.gam) 
+
+#png("Fig.SB.5.png", width = 1600, height = 1200) 
+plot_predictions(cwm.sedentary.gam, condition=c('dband','location'), 
+                 type='response', points=0.5,# adds data point to graph
+                 rug=T)
+
+## between reef mobility
+cwm.betweenreef.gam <- gam(cwm ~ s(dband)+location*dband, 
+                         family = betar, # beta regression model, for proportion data
+                         data = cwm.mobility %>%
+                           filter(mobility=="between.reef.mob") %>%
+                           group_by(dband,location), 
+                         method = "REML") # used for small datasets to avoid overfitting
+summary(cwm.betweenreef.gam ) 
+
+#png("Fig.SB.5.png", width = 1600, height = 1200) 
+plot_predictions(cwm.betweenreef.gam , condition=c('dband','location'), 
+                 type='response', points=0.5,# adds data point to graph
+                 rug=T)
+#--bar plot -------------
+cwm.mobility.barplot <- cwm.mobility %>%
+  mutate(dband=factor(dband,levels=sort(unique(cwm.mobility$dband))))
+
+mobility.plot <- ggplot(cwm.mobility.barplot, aes(x = dband, y = cwm)) +
+  geom_bar(position="fill",stat="identity",
+           aes(fill=mobility))+
+  scale_fill_fish_d(option = "Centropyge_loricula",end=0.8) + 
+  theme_classic()+
+  ggtitle("mobility")+
+  labs(fill="")+
+  scale_x_discrete(breaks=c("0","50","100","150","200","250","300","350","410","470"))+
+  ylab("frequency") 
+mobility.plot  
+
+#### 3.7. Gregariousness ####
+cwm.gregariousness <- bind_rows(cur.cwm.gregariousness, bon.cwm.gregariousness,
+                                roa.cwm.gregariousness, sta.cwm.gregariousness) %>%
+  select_if(negate(function(col) is.numeric(col) && sum(col) == 0)) %>%
+  gather(3:7, key = "gregariousness", value = "cwm") %>%
+  mutate(gregariousness = str_remove(gregariousness, "greg_"))%>%
+  mutate(gregariousness = factor(str_remove(gregariousness, "_1"),
+                           levels=c("solitary","pairing","small.group",
+                                        "medium.group","large.group")))
+
+cwm.gregariousness.barplot <- cwm.gregariousness %>%
+  mutate(dband=factor(dband,levels=sort(unique(cwm.gregariousness$dband))))
+
+gregariousness.plot <- ggplot(cwm.gregariousness.barplot, aes(x = dband, y = cwm)) +
+  geom_bar(position="fill",stat="identity",
+           aes(fill=gregariousness))+
+  scale_fill_fish_d(option = "Centropyge_loricula") + 
+  theme_classic()+
+  ggtitle("gregariousness")+
+  labs(fill="")+
+  scale_x_discrete(breaks=c("0","50","100","150","200","250","300","350","410","470"))+
+  ylab("frequency") 
+gregariousness.plot  
+
+#### 3.8. Diel activity ####
+cwm.activity <- bind_rows(cur.cwm.activity, bon.cwm.activity,
+                                roa.cwm.activity, sta.cwm.activity) %>%
+  select_if(negate(function(col) is.numeric(col) && sum(col) == 0)) %>%
+  gather(3:6, key = "activity", value = "cwm") %>%
+  mutate(activity = str_remove(activity, "activity_"))%>%
+  mutate(activity = factor(str_remove(activity, "_1"),
+                                 levels=rev(c("unknown","day","night",
+                                              "both"))))
+
+cwm.activity.barplot <- cwm.activity %>%
+  mutate(dband=factor(dband,levels=sort(unique(cwm.activity$dband))))
+
+activity.colors=rev(c("grey","#143896","#F5C957","#842724"))
+
+activity.plot <- ggplot(cwm.activity.barplot, aes(x = dband, y = cwm)) +
+  geom_bar(position="fill",stat="identity",
+           aes(fill=activity))+
+  scale_fill_manual(values=activity.colors) + 
+  theme_classic()+
+  ggtitle("activity")+
+  labs(fill="")+
+  scale_x_discrete(breaks=c("0","50","100","150","200","250","300","350","410","470"))+
+  ylab("frequency") 
+activity.plot  
+
+#.---------- Fig 1: trials ------------ 
+  ## 2 per row, without reproduction
+ggarrange(size.plot+ rremove("xlab"),
+          position.plot+ rremove("xlab")+ rremove("ylab"),
+          diet.plot+ rremove("xlab")+rremove("xlab"), 
+           mobility.plot+rremove("xlab")+ rremove("ylab"), gregariousness.plot,
+          activity.plot+rremove("ylab"),ncol = 2,
+          nrow=3,legend="bottom",vjust=-1)
+
+  ## single column, reproduction included 
+ggarrange(size.plot+ rremove("xlab")+ rremove("ylab"),
+          position.plot+ rremove("xlab")+ rremove("ylab"),
+          diet.plot+ rremove("xlab")+rremove("ylab"), 
+          mobility.plot+rremove("xlab")+ rremove("ylab"), 
+          gregariousness.plot+ rremove("xlab")+ rremove("ylab"),
+          activity.plot+ rremove("xlab")+ rremove("ylab"),
+          repro.plot+ rremove("xlab")+ rremove("ylab"),
+          ncol = 1, nrow=7,legend="right",vjust=-1,spacing=0.05)
+
+#.---------- Fig 1: final ------------
+repro.flip <- repro.plot + coord_flip() +
+  theme(plot.title = element_text(size = 12),
+        plot.margin=margin(1,1,1,1))+
+  scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1),
+    labels = c("0", "", "0.5", "", "1"))+
+  xlab("")+
+  scale_x_discrete(limits = rev(levels(cwm.repro.barplot$dband)),position="top")
+
+
+size.flip <- size.plot + coord_flip()+
+  theme(plot.title = element_text(size = 12),
+        plot.margin=margin(1,1,1,1))+
+  scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1),
+                     labels = c("0", "", "0.5", "", "1"))+
+  scale_x_discrete(limits = rev(levels(cwm.repro.barplot$dband)))
+
+diet.flip <- diet.plot + coord_flip()+
+  theme(plot.title = element_text(size = 12),
+        plot.margin=margin(1,1,1,1),
+        axis.text.y = element_blank())+
+  scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1),
+                     labels = c("0", "", "0.5", "", "1"))+
+  scale_x_discrete(limits = rev(levels(cwm.repro.barplot$dband)))
+
+mobility.flip <- mobility.plot + coord_flip()+
+  theme(plot.title = element_text(size = 12),
+        plot.margin=margin(1,1,1,1),
+        axis.text.y = element_blank())+
+  scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1),
+                     labels = c("0", "", "0.5", "", "1"))+
+  scale_x_discrete(limits = rev(levels(cwm.repro.barplot$dband)))
+
+activity.flip <- activity.plot + coord_flip()+
+  theme(plot.title = element_text(size = 12),
+        plot.margin=margin(1,1,1,1),
+        axis.text.y = element_blank())+
+  scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1),
+                     labels = c("0", "", "0.5", "", "1"))+
+  scale_x_discrete(limits = rev(levels(cwm.repro.barplot$dband)))
+
+position.flip <- position.plot + coord_flip()+
+  theme(plot.title = element_text(size = 12),
+        plot.margin=margin(1,1,1,1),
+        axis.text.y = element_blank())+
+  scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1),
+                     labels = c("0", "", "0.5", "", "1"))+
+  scale_x_discrete(limits = rev(levels(cwm.repro.barplot$dband)))
+
+gregariousness.flip <- gregariousness.plot + coord_flip()+
+  theme(plot.title = element_text(size = 12),
+        plot.margin=margin(1,1,1,1),
+        axis.text.y = element_blank())+
+  scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1),
+                     labels = c("0", "", "0.5", "", "1"))+
+  scale_x_discrete(limits = rev(levels(cwm.repro.barplot$dband)))
+
+ggarrange(size.flip+ rremove("xlab"),
+          position.flip+ rremove("xlab")+ rremove("ylab"),
+          diet.flip+ rremove("xlab")+rremove("ylab"), 
+          mobility.flip+rremove("xlab")+ rremove("ylab"), 
+          gregariousness.flip+ rremove("xlab")+ rremove("ylab"),
+          activity.flip+ rremove("xlab")+ rremove("ylab"),
+          repro.flip+ rremove("xlab")+ rremove("ylab"),
+          ncol = 7, nrow=1,legend="bottom",vjust=-1,align = "h",
+          widths=c(1.4,1,1,1,1,1,1))
+
+
+#### 4. Again by species instead of abundance ####
+species_traits <- read.csv("file.all.fish.to.2024.csv")  %>%
+  select(species.traits,dband,abu.corr) %>%
+  mutate(dband = case_when(dband >= 310 & dband <= 330 ~ 320,
+                           dband >= 340 & dband <= 360 ~ 350,
+                           dband >= 370 & dband <= 390 ~ 380,
+                           dband >= 400 & dband <= 420 ~ 410,
+                           dband >= 430 & dband <= 450 ~ 440,
+                           dband >= 460 & dband <= 480 ~ 470,
+                           TRUE ~ dband)) %>%
+  group_by(species.traits,dband) %>%
+  summarize(tot=sum(abu.corr)) %>%
+  left_join(read.csv("file.functional.traits.csv"))
+
+## Size at maturity
+  species.size <- species_traits  %>%
+  group_by(dband) %>%
+  summarize(size_xs=sum(size_xs),size_s=sum(size_s),size_m=sum(size_m),size_l=sum(size_l),
+            size_xl=sum(size_xl)) %>%
+  pivot_longer(cols = starts_with("size_"), # Specify columns to pivot
+    names_to = "size",          # Name of the new column for column names
+    values_to = "sp.richness")%>%
+  mutate(size=factor(size,levels=c("size_xs","size_s","size_m","size_l","size_xl")),
+        dband=factor(dband))
+ 
+## stacked barplot
+species.size.plot <- ggplot(species.size, aes(x = dband, y = sp.richness,fill=size)) +
+  geom_bar(position="stack",stat="identity")+
+  scale_fill_fish_d(option = "Centropyge_loricula") +
+  scale_x_discrete(limits = rev(levels(species.size$dband)))+
+  theme_classic()+
+  ggtitle("size")+
+  labs(fill="")+
+  ylab("species richness")+
+  xlab("depth (m)")+
+  coord_flip()
+species.size.plot 
+
+## diet
+species.diet <- species_traits  %>%
+  group_by(dband) %>%
+  summarize(across(starts_with("diet"), ~ sum(.))) %>%
+  pivot_longer(cols = starts_with("diet_"), # Specify columns to pivot
+               names_to = "diet",          # Name of the new column for column names
+               values_to = "sp.richness")%>%
+  mutate(diet = factor(str_remove(diet, "diet_"),
+                       levels=rev(c("Benthic.macroalgae",
+                                    "Benthic.microalgae",
+                                    "Detritus","Zooplankton","Ectoparasites",
+                                    "Hard.corals","MobileBenthicInverts","SessileInverts",
+                                    "Bony.fishes"))),
+         dband=factor(dband))
+
+## stacked barplot
+colors=rev(c("#3cb464", "#9bddb1",
+                    "#777098","#143896",
+                    "#ebdbfd","#EBC662","#DD5236","#d48c84","#832824"))
+                    
+species.diet.plot <- ggplot(species.diet, aes(x = dband, y = sp.richness,fill=diet)) +
+  geom_bar(position="stack",stat="identity")+
+  scale_fill_manual(values = colors) +
+  scale_x_discrete(limits = rev(levels(species.diet$dband)))+
+  theme_classic()+
+  ggtitle("diet")+
+  labs(fill="")+
+  ylab("species richness")+
+  xlab("depth (m)")+
+  coord_flip()
+species.diet.plot 
+
+### Water column position
+species.position <- species_traits  %>%
+  group_by(dband) %>%
+  summarize(across(starts_with("position"), ~ sum(.))) %>%
+  pivot_longer(cols = starts_with("position_"), # Specify columns to pivot
+               names_to = "position",          # Name of the new column for column names
+               values_to = "sp.richness")%>%
+  mutate(position = factor(str_remove(position, "position_"),
+                       levels=c("Bottom","Near.Bottom","Mid.Water","Near.Surface")),
+         dband=factor(dband))
+
+## stacked barplot
+species.position.plot <- ggplot(species.position, aes(x = dband, y = sp.richness,fill=position)) +
+  geom_bar(position="stack",stat="identity")+
+  scale_fill_manual(values=rev(c("black","#143896","#F6C956","#842724")))+
+  scale_x_discrete(limits = rev(levels(species.position$dband)))+
+  theme_classic()+
+  ggtitle("position")+
+  labs(fill="")+
+  ylab("species richness")+
+  xlab("depth (m)")+
+  coord_flip()
+species.position.plot 
+
+### Reproduction 
+species.reproduction <- species_traits  %>%
+  group_by(dband) %>%
+  summarize(across(starts_with("repro_"), ~ sum(.))) %>%
+  pivot_longer(cols = starts_with("repro_"), # Specify columns to pivot
+               names_to = "reproduction",          # Name of the new column for column names
+               values_to = "sp.richness")%>%
+  mutate(reproduction = factor(str_remove(reproduction, "repro_")),
+         dband=factor(dband))
+
+## stacked barplot
+species.reproduction.plot <- ggplot(species.reproduction, aes(x = dband, 
+                      y = sp.richness,fill=reproduction)) +
+  geom_bar(position="stack",stat="identity")+
+  scale_fill_fish_d(option = "Centropyge_loricula",end=0.8) + 
+  scale_x_discrete(limits = rev(levels(species.reproduction$dband)))+
+  theme_classic()+
+  ggtitle("reproduction")+
+  labs(fill="")+
+  ylab("species richness")+
+  xlab("depth (m)")+
+  coord_flip()
+species.reproduction.plot 
+
+### mobility
+species.mobility <- species_traits  %>%
+  group_by(dband) %>%
+  summarize(across(starts_with("mobility_"), ~ sum(.))) %>%
+  pivot_longer(cols = starts_with("mobility_"), # Specify columns to pivot
+               names_to = "mobility",          # Name of the new column for column names
+               values_to = "sp.richness")%>%
+  mutate(mobility = factor(str_remove(mobility, "mobility_"),
+                           levels=rev(c("sedentary","within.reef.mob","between.reef.mob","vertical.mob"))),
+         dband=factor(dband))
+
+## stacked barplot
+species.mobility.plot <- ggplot(species.mobility, aes(x = dband, 
+                                                              y = sp.richness,fill=mobility)) +
+  geom_bar(position="stack",stat="identity")+
+  scale_fill_fish_d(option = "Centropyge_loricula",end=0.8) + 
+  scale_x_discrete(limits = rev(levels(species.mobility$dband)))+
+  theme_classic()+
+  ggtitle("mobility")+
+  labs(fill="")+
+  ylab("species richness")+
+  xlab("depth (m)")+
+  coord_flip()
+species.mobility.plot 
+
+### Gregariousness
+species.greg <- species_traits  %>%
+  group_by(dband) %>%
+  summarize(across(starts_with("greg_"), ~ sum(.))) %>%
+  pivot_longer(cols = starts_with("greg_"), # Specify columns to pivot
+               names_to = "greg",          # Name of the new column for column names
+               values_to = "sp.richness")%>%
+  mutate(greg = factor(str_remove(greg, "greg_"),
+                       levels=c("solitary","pairing","small.group",
+                                "medium.group","large.group")),
+                           dband=factor(dband))
+
+## stacked barplot
+species.greg.plot <- ggplot(species.greg, aes(x = dband, y = sp.richness,fill=greg)) +
+  geom_bar(position="stack",stat="identity")+
+  scale_fill_fish_d(option = "Centropyge_loricula") + 
+  scale_x_discrete(limits = rev(levels(species.greg$dband)))+
+  theme_classic()+
+  ggtitle("greg")+
+  labs(fill="")+
+  ylab("species richness")+
+  xlab("depth (m)")+
+  coord_flip()
+species.greg.plot 
+
+### Activity
+species.activity <- species_traits  %>%
+  group_by(dband) %>%
+  summarize(across(starts_with("activity_"), ~ sum(.))) %>%
+  pivot_longer(cols = starts_with("activity_"), # Specify columns to pivot
+               names_to = "activity",          # Name of the new column for column names
+               values_to = "sp.richness")%>%
+  mutate(activity = factor(str_remove(activity, "activity_"),
+                           levels=rev(c("unknown","day","night",
+                                        "both"))),
+         dband=factor(dband))
+
+activity.colors=rev(c("grey","#143896","#F5C957","#842724"))
+
+## stacked barplot
+species.activity.plot <- ggplot(species.activity, aes(x = dband, y = sp.richness,fill=activity)) +
+  geom_bar(position="stack",stat="identity")+
+  scale_fill_manual(values = activity.colors) + 
+  scale_x_discrete(limits = rev(levels(species.activity$dband)))+
+  theme_classic()+
+  ggtitle("activity")+
+  labs(fill="")+
+  ylab("species richness")+
+  xlab("depth (m)")+
+  coord_flip()
+species.activity.plot 
+
+ggarrange(species.size.plot+ rremove("xlab"),
+          species.position.plot+ rremove("xlab")+ rremove("ylab"),
+          species.diet.plot+ rremove("xlab")+rremove("ylab"), 
+          species.mobility.plot+rremove("xlab")+ rremove("ylab"), 
+          species.greg.plot+ rremove("xlab")+ rremove("ylab"),
+          species.activity.plot+ rremove("xlab")+ rremove("ylab"),
+          species.reproduction.plot+ rremove("xlab")+ rremove("ylab"),
+          ncol = 7, nrow=1,legend=F,vjust=-1,align = "h",
+          widths=c(1.4,1,1,1,1,1,1))

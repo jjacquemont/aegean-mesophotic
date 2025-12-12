@@ -1,0 +1,1506 @@
+library(tidyverse)
+library(ggplot2)
+library(rfishbase)
+library(dplyr)
+library(FD) # functional diversity, evenness, dispersion
+library(SYNCSA) # functional redundancy
+library(fishualize)
+library(mgcv) #gam model
+library(marginaleffects) #visualize gam outputs
+library(modelr) #data manipulation such as data_grid
+library(ggpubr) 
+library(cowplot)
+library(ggrepel)
+library(viridis)
+#library(devtools) #to enable the download of an archived version of clustsig
+#install_github("cran/clustsig")
+library(clustsig)
+library(vegan)
+library(ggdendro)
+
+traits.all <- read.csv("file.functional.traits.csv") %>%
+  select(-contains("trophic")) %>%
+  select(-contains("activity")) %>%
+  select(-source)
+
+trait.weights <- c(rep(1/5,5),
+                   rep(1/9,9),
+                   rep(1/4,4),
+                   rep(1/4,4), # repro mode
+                   rep(1/4,4),
+                   rep(1/5,5))
+
+
+#### 1. Computing functional metrics for each trait ####
+#### 1.1. FD Curacao ####
+cur.com <- read.csv("file.all.fish.to.2024.csv")  %>%
+  select(species.traits,species,dband,location,abu.corr) %>%
+  filter(location == "Curacao") %>%
+  group_by(species.traits, dband) %>%
+  summarize(abundance = sqrt(sum(abu.corr))) %>%
+  spread(species.traits, abundance, fill =  0) %>%
+  as.data.frame()
+
+rownames(cur.com) <- cur.com$dband
+cur.com.cl <- cur.com[-1]
+
+cur.names <- data.frame("species.traits" = colnames(cur.com.cl)) 
+cur.traits <- cur.names %>%
+  left_join(traits.all) %>%
+  select(-species)
+
+rownames(cur.traits) = cur.traits$species.traits
+cur.traits.rn <- cur.traits[-1]
+
+## name check
+data.frame("colnames" = colnames(cur.com.cl), "rownames" = cur.traits$species) %>%
+  mutate(namecheck = case_when(colnames == rownames ~ "TRUE",
+                               TRUE ~ "FALSE")) %>%
+  filter(namecheck==FALSE)
+
+## functional diversity metrics
+# NB: nb of PCoA axes is 3 max because some communities have only 4 species
+fd.cur <- dbFD(cur.traits.rn, cur.com.cl, w = trait.weights, w.abun = TRUE, m = 3,
+               CWM.type = "all", corr = "cailliez", stand.FRic = TRUE)
+
+cur.fd.res <- data.frame("dband" = as.numeric(rownames(cur.com.cl)),
+                         "location" = "Curacao",
+                         "spric" = fd.cur$nbsp,
+                         "fric" = fd.cur$FRic,
+                         "fdis"=fd.cur$FDis,
+                         "feve" = fd.cur$FEve,
+                         "redundancy"=rao.diversity(traits=cur.traits.rn, comm=cur.com.cl)$FunRedundancy,
+                         "raoq" = fd.cur$RaoQ)
+
+## plot functional richness
+plot.cur.fric <- ggplot(cur.fd.res)+ # fric vs depth
+  geom_point(aes(y=fric,x=dband,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  ggtitle("Curaçao")+
+  theme_classic()
+
+## plot functional eveness
+plot.cur.feve <-ggplot(cur.fd.res)+
+  ylim(c(0.5,1))+
+  geom_point(aes(y=feve,x=dband,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  theme_classic()
+
+## plot functional dispersion
+plot.cur.disp <-ggplot(cur.fd.res)+
+  ylim(c(0,0.25))+
+  geom_point(aes(y=fdis,x=dband,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  theme_classic()
+
+#### 1.2. FD Bonaire ####
+bon.com <- read.csv("file.all.fish.to.2024.csv") %>%
+  select(species.traits,dband,location,abu.corr) %>%
+  filter(location == "Bonaire") %>%
+  #bind_rows(shallow.bonaire) %>%
+  mutate(dband.grouped = case_when(dband >= 190 & dband <= 200 ~ 200,
+                                   dband >= 220 & dband <= 250 ~ 240,
+                                   dband >= 280 & dband <= 300 ~ 290,
+                                   TRUE ~ dband)) %>%
+  group_by(species.traits, dband.grouped) %>%
+  summarize(abundance = sqrt(sum(abu.corr))) %>%
+  spread(species.traits, abundance, fill =  0) %>%
+  as.data.frame()
+
+
+rownames(bon.com) <- bon.com$dband.grouped
+bon.com.cl <- bon.com[-1]
+
+bon.names <- data.frame("species.traits" = colnames(bon.com.cl)) 
+bon.traits <- bon.names %>%
+  left_join(traits.all) %>%
+  select(-species) 
+
+rownames(bon.traits) = bon.traits$species.traits
+bon.traits.rn <- bon.traits[-1]
+
+## name check
+data.frame("colnames" = colnames(bon.com.cl), "rownames" = bon.traits$species) %>%
+  mutate(namecheck = case_when(colnames == rownames ~ "TRUE",
+                               TRUE ~ "FALSE"))%>%
+  filter(namecheck==FALSE)
+
+## functional diversity metrics
+fd.bon <- dbFD(bon.traits.rn, bon.com.cl, w = trait.weights, w.abun = TRUE,
+               CWM.type = "all", m =2, corr = "cailliez", stand.FRic = TRUE)
+
+
+bon.fd.res <- data.frame("dband" = as.numeric(rownames(bon.com.cl)),
+                         "location" = "Bonaire",
+                         "spric" = fd.bon$nbsp,
+                         "fric" = fd.bon$FRic,
+                         "feve" = fd.bon$FEve,
+                         "fdis"=fd.bon$FDis,
+                         "raoq" = fd.bon$RaoQ) %>%
+  filter(dband<260) %>%
+  mutate(redundancy=rao.diversity(traits=bon.traits.rn, comm=bon.com.cl)$FunRedundancy[c(1:22)])
+
+
+## plot species richness vs. functional richness
+plot.bon.fric <- ggplot(bon.fd.res)+
+  geom_point(aes(y=fric,x=spric,color=dband))+
+  scale_color_gradient(low="lightblue",high="black")+
+  theme_classic()
+
+plot.bon.fric <- ggplot(bon.fd.res)+
+  geom_point(aes(y=fric,x=dband,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  ggtitle("Bonaire")+
+  theme_classic()
+
+## plot species richness vs. functional eveness
+plot.bon.feve <-ggplot(bon.fd.res)+
+  geom_point(aes(y=feve,x=spric,color=dband))+
+  scale_color_gradient(low="lightblue",high="black")+
+  theme_classic()
+
+plot.bon.feve <-ggplot(bon.fd.res)+
+  geom_point(aes(y=feve,x=dband,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  ylim(c(0.5,1))+
+  theme_classic()
+
+## plot functional disperson
+plot.bon.disp <-ggplot(bon.fd.res)+
+  ylim(c(0,0.25))+
+  geom_point(aes(y=fdis,x=dband,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  theme_classic()
+
+
+
+#### 1.3. FD Roatan ####
+roa.com <- read.csv("file.all.fish.to.2024.csv") %>%
+  select(species.traits,dband,location,abu.corr) %>%
+  filter(location == "Roatan") %>%
+  #filter(dband >= 40 & dband <= 300) %>%
+  mutate(dband.grouped = case_when(dband >= 310 & dband <= 330 ~ 320,
+                                   dband >= 340 & dband <= 360 ~ 350,
+                                   dband >= 370 & dband <= 390 ~ 380,
+                                   dband >= 400 & dband <= 420 ~ 410,
+                                   dband >= 430 & dband <= 450 ~ 440,
+                                   dband >= 460 & dband <= 480 ~ 470,
+                                   TRUE ~ dband)) %>%
+  group_by(species.traits, dband.grouped) %>%
+  summarize(abundance = sqrt(sum(abu.corr))) %>%
+  spread(species.traits, abundance, fill =  0) %>%
+  as.data.frame()
+
+rownames(roa.com) <- roa.com$dband.grouped
+roa.com.cl <- roa.com[-1]
+
+roa.names <- data.frame("species.traits" = colnames(roa.com.cl)) 
+roa.traits <- roa.names %>%
+  left_join(traits.all) %>%
+  select(-species) 
+
+rownames(roa.traits) = roa.traits$species.traits
+roa.traits.rn <- roa.traits[-1]
+
+data.frame("colnames" = colnames(roa.com.cl), "rownames" = roa.traits$species) %>%
+  mutate(namecheck = case_when(colnames == rownames ~ "TRUE",
+                               TRUE ~ "FALSE"))%>%
+  filter(namecheck==FALSE)
+
+fd.roa <- dbFD(roa.traits.rn, roa.com.cl, w = trait.weights, w.abun = TRUE, m = 3,
+               CWM.type = "all", corr = "cailliez", stand.FRic = TRUE)
+fd.roa
+
+roa.fd.res <- data.frame("dband" = as.numeric(rownames(roa.com.cl)),
+                         "location" = "Roatan",
+                         "spric" = fd.roa$nbsp,
+                         "fric" = fd.roa$FRic,
+                         "feve" = fd.roa$FEve,
+                         "fdis"=fd.roa$FDis,
+                         "redundancy"=rao.diversity(traits=roa.traits.rn, comm=roa.com.cl)$FunRedundancy,
+                         "raoq" = fd.roa$RaoQ)
+
+## plot species richness vs. functional richness
+plot.roa.fric <- ggplot(roa.fd.res)+
+  geom_point(aes(x=spric,y=fric,color=dband))+
+  scale_color_gradient(low="lightblue",high="black")+
+  theme_classic()
+
+plot.roa.fric <- ggplot(roa.fd.res)+
+  geom_point(aes(x=dband,y=fric,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  ggtitle("Roatan")+
+  theme_classic()
+
+## plot species richness vs. functional eveness
+plot.roa.feve <-ggplot(roa.fd.res)+
+  geom_point(aes(x=spric,y=feve,color=dband))+
+  scale_color_gradient(low="lightblue",high="black")+
+  theme_classic()
+
+plot.roa.feve <-ggplot(roa.fd.res)+
+  geom_point(aes(x=dband,y=feve,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  ylim(c(0.5,1))+
+  theme_classic()
+
+## plot functional disperson
+plot.roa.disp <-ggplot(roa.fd.res)+
+  ylim(c(0,0.25))+
+  geom_point(aes(y=fdis,x=dband,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  theme_classic()
+
+
+#### 1.4. FD Statia ####
+sta.com <- read.csv("file.all.fish.to.2024.csv") %>%
+  select(species.traits,dband,location,abu.corr) %>%
+  filter(location == "Statia") %>%
+  mutate(dband.grouped = case_when(dband >= 240 & dband <= 270 ~ 260,
+                                   TRUE ~ dband)) %>%
+  group_by(species.traits, dband.grouped) %>%
+  summarize(abundance = sqrt(sum(abu.corr))) %>%
+  spread(species.traits, abundance, fill =  0) %>%
+  as.data.frame()
+
+rownames(sta.com) <- sta.com$dband.grouped
+sta.com.cl <- sta.com[-1]
+
+sta.names <- data.frame("species.traits" = colnames(sta.com.cl)) 
+sta.traits <- sta.names %>%
+  left_join(traits.all) %>%
+  select(-species) 
+
+rownames(sta.traits) = sta.traits$species
+sta.traits.rn <- sta.traits[-1]
+
+data.frame("colnames" = colnames(sta.com.cl), "rownames" = sta.traits$species) %>%
+  mutate(namecheck = case_when(colnames == rownames ~ "TRUE",
+                               TRUE ~ "FALSE"))%>%
+  filter(namecheck==FALSE)
+
+
+fd.sta <- dbFD(sta.traits.rn, sta.com.cl, w = trait.weights, w.abun = TRUE, m = 3, 
+               CWM.type = "all", corr = "cailliez", stand.FRic = TRUE)
+
+sta.fd.res <- data.frame("dband" = as.numeric(rownames(sta.com.cl)),
+                         "location" = "Statia",
+                         "spric" = fd.sta$nbsp,
+                         "fric" = fd.sta$FRic,
+                         "feve" = fd.sta$FEve,
+                         "fdis"=fd.sta$FDis,
+                         "redundancy"=rao.diversity(traits=sta.traits.rn, comm=sta.com.cl)$FunRedundancy,
+                         "raoq" = fd.sta$RaoQ)
+
+## plot species richness vs. functional richness
+plot.sta.fric <- ggplot(sta.fd.res)+
+  geom_point(aes(x=spric,y=fric,color=dband))+
+  scale_color_gradient(low="lightblue",high="black")+
+  theme_classic()
+
+plot.sta.fric <- ggplot(sta.fd.res)+
+  geom_point(aes(x=dband,y=fric,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  ggtitle("Statia")+
+  theme_classic()
+
+## plot species richness vs. functional eveness
+plot.sta.feve <-ggplot(sta.fd.res)+
+  geom_point(aes(x=spric,y=feve,color=dband))+
+  scale_color_gradient(low="lightblue",high="black")+
+  theme_classic()
+
+plot.sta.feve <-ggplot(sta.fd.res)+
+  geom_point(aes(x=dband,y=feve,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  ylim(c(0.5,1))+
+  theme_classic()
+
+## plot functional dispersion
+plot.sta.disp <-ggplot(sta.fd.res)+
+  ylim(c(0,0.25))+
+  geom_point(aes(y=fdis,x=dband,color=spric))+
+  scale_color_viridis(option="magma",end=0.8)+
+  theme_classic()
+
+#.--- FIG 2: cross-site plots (richness, evenness, dispersion) ####
+fd.res.all <- bind_rows(cur.fd.res, bon.fd.res, roa.fd.res, sta.fd.res) %>%
+  drop_na(fric) %>%
+  mutate(location = as.factor(location))
+
+plot.fric <- ggplot(fd.res.all)+
+  geom_point(aes(x=dband,y=fric,color=spric,shape=location))+
+  scale_color_viridis(option="magma",end=0.8)+
+  geom_smooth(method = "gam",aes(y=fric, x=dband),fill="#DFA8E4",
+              color="#371554",fullrange=TRUE)+
+  ggtitle("functional richness")+
+  ylim(c(-0.1,1))+
+  ylab("")+
+  theme_classic()
+
+fric.gam <- gam(fric ~ s(dband), data = fd.res.all, method = "REML") # used for small datasets to avoid overfitting
+summary(fric.gam) 
+
+plot.feve <- ggplot(fd.res.all)+
+  geom_point(aes(x=dband,y=feve,color=spric,shape=location))+
+  scale_color_viridis(option="magma",end=0.8)+
+  ggtitle("functional evenness")+
+  geom_smooth(method = "gam",aes(y=feve, x=dband),fill="#DFA8E4",
+              color="#371554",fullrange=TRUE)+
+  #ylim(c(0,1))+
+  ylab("")+
+  theme_classic()
+
+feve.gam <- gam(feve ~ s(dband), data = fd.res.all, method = "REML") # used for small datasets to avoid overfitting
+summary(feve.gam) 
+
+plot.fdis <- ggplot(fd.res.all)+
+  geom_point(aes(x=dband,y=fdis,color=spric,shape=location))+
+  scale_color_viridis(option="magma",end=0.8)+
+  ggtitle("functional dispersion")+
+  #ylim(c(0,1))+
+  geom_smooth(method = "gam",aes(y=fdis, x=dband),fill="#DFA8E4",
+              color="#371554",fullrange=TRUE)+
+  ylab("")+
+  theme_classic()
+
+fdis.gam <- gam(fdis ~ s(dband), data = fd.res.all, method = "REML") # used for small datasets to avoid overfitting
+summary(fdis.gam) 
+
+
+ggarrange(plot.fric+ rremove("xlab"), plot.feve+ rremove("xlab"), plot.fdis,
+          ncol = 1,nrow=3,common.legend=TRUE,align = "v", legend="bottom")
+
+ggarrange(plot.cur.fric+ rremove("xlab"), plot.cur.feve+ rremove("xlab"), plot.cur.disp+ rremove("xlab"),
+          plot.bon.fric+ rremove("xlab"), plot.bon.feve+ rremove("xlab"), plot.bon.disp+ rremove("xlab"),
+          plot.sta.fric+ rremove("xlab"), plot.sta.feve+ rremove("xlab"), plot.sta.disp+ rremove("xlab"),
+          plot.roa.fric, plot.roa.feve, plot.roa.disp,
+          ncol = 3,nrow=4,common.legend=TRUE,
+          legend="bottom")
+
+GGally::ggpairs(fd.res.all %>%
+                  select(-raoq,-location))
+
+#.---Functional redundancy -------------
+plot.redund.all <- ggplot(fd.res.all)+
+  geom_point(aes(x=dband,y=redundancy,color=spric,shape=location))+
+  scale_color_viridis(option="magma",end=0.8)+
+  geom_smooth(method = "gam",aes(y=redundancy, x=dband),fill="#DFA8E4",
+              color="#371554",fullrange=TRUE)+
+  ggtitle("functional redundancy")+
+  #ylim(c(0.2,0.7))+
+  ylab("")+
+  theme_classic()
+plot.redund.all
+
+redund.gam <- gam(redundancy ~ s(dband), data = fd.res.all, method = "REML") # used for small datasets to avoid overfitting
+summary(redund.gam) 
+
+#### 2. PcoA of functional traits ####
+all.com <- read.csv("file.all.fish.to.2024.csv") %>%
+  group_by(species.traits) %>%
+  summarize(abundance = sqrt(sum(abu.corr))) %>%
+  spread(species.traits, abundance, fill =  0) %>%
+  as.data.frame()
+
+all.names <- data.frame("species.traits" = colnames(all.com)) 
+
+all.traits <- all.names %>%
+  left_join(traits.all) %>%
+  select(-species) 
+
+rownames(all.traits) = all.traits$species.traits
+all.traits.rn <- all.traits[-1]
+
+## name check
+data.frame("colnames" = colnames(all.com), "rownames" = all.traits$species) %>%
+  mutate(namecheck = case_when(colnames == rownames ~ "TRUE",
+                               TRUE ~ "FALSE")) %>%
+  filter(namecheck==FALSE)
+
+## functional diversity metrics
+# NB: nb of PCoA axes is 3 max because some communities have only 4 species
+fd.all <- dbFD(all.traits.rn, all.com, w = trait.weights, w.abun = TRUE, m = 3,
+               CWM.type = "all", corr = "cailliez", stand.FRic = TRUE,
+               print.pco = TRUE,calc.FGR = T)
+g
+167
+
+fd.all$qual.FRic # quality of the functional space - 0.23 (Jan 22rd 25)
+fd.all$nbsp # number of species - 254 (Jan 22rd 25)
+fd.all$sing.sp # number of unique trait combination - 168 (Jan 3rd 25)
+fd.all$x.values # eigen values of PcoA axes
+sum(fd.all$x.values[1:2])/sum(fd.all$x.values)*100 # variance captured by the two first axes
+as.data.frame(fd.all$spfgr) # functional group membership for each species.
+fd.all$gr.abun # abundances of each functional group in each community
+
+pca.axes <- fd.all[["x.axes"]]%>%
+  select(A1,A2,A3,A4) %>%
+  mutate(species.traits=rownames(.),
+         abundance=as.numeric(all.com))%>%
+  left_join(read.csv("file.depth.affinity.transsite.csv"))%>%
+  mutate(predominance=case_when(is.na(predominance)~"unknown",
+                                TRUE~predominance))%>%
+  #filter(predominance!="NA")%>% # individuals only identified to the genus/family cannot be attributed with a depth affinity
+  mutate(predominance=factor(predominance, levels=rev(c("unknown","DS","R","MR","M","AM"))))
+
+## Find the convex hull of the points being plotted
+hull.outline <- pca.axes %>% # for all species
+  slice(chull(A1, A2))
+
+hull <- pca.axes %>% # for species per depth predominance
+  filter(predominance!="unknown")%>% #dont want a hull for unknown depths
+  group_by(predominance) %>%
+  slice(chull(A1, A2))
+
+# calculate centroid for each depth predominance on A1/A2
+centroids <- pca.axes %>%
+  filter(predominance!="unknown")%>% #dont want a hull for unknown depths
+  group_by(predominance) %>%
+  summarize(A1.centroid=weighted.mean(x=A1,w=abundance),
+            A2.centroid=mean(A2,w=abundance),
+            A3.centroid=mean(A3,w=abundance),
+            A4.centroid=mean(A4,w=abundance))
+
+# calculate coordinates of main vectors
+trait.vectors <- as.data.frame(cor(all.traits.rn, pca.axes[, 1:2]))%>%
+  mutate(trait=rownames(.), cor_sum=abs(A1)+abs(A2)) %>%
+  arrange(desc(cor_sum)) %>%        
+  slice_head(n = 8) %>%
+  #rescaling correlations [0 to 1] to the PCA axes scale
+  mutate(A1=case_when(A1<0~A1*abs(min(pca.axes$A1)), A1>0~A1*abs(max(pca.axes$A1))),
+         A2=case_when(A2<0~A2*abs(min(pca.axes$A2)), A2>0~A2*abs(max(pca.axes$A2))),
+         trait=case_when(trait=="greg_small.group"~"small school",
+                         trait=="position_Near.Bottom"~"near bottom",
+                         trait=="repro_benthic.eggs"~"benthic eggs",
+                         trait=="mobility_sedentary"~"sedentary",
+                         trait=="position_Bottom"~"bottom",
+                         trait=="greg_solitary"~"solitary",
+                         trait=="repro_pelagic.eggs"~"pelagic eggs",
+                         trait=="mobility_within.reef.mob"~"within reef mobility"))
+  
+
+#### 2.3.0. Functional space by depth zone #### 
+traits.realms <- read.csv("file.all.fish.to.2024.csv") %>%
+  group_by(species.traits,location,dband) %>%
+  summarize(abundance = sum(abu.corr)) %>%
+  mutate(depth.realm=case_when(
+    location=="Curacao" & dband<=30 ~ "altiphotic",
+    location=="Curacao" & dband<=70 ~ "upper mesophotic",
+    location=="Curacao" & dband<=120 ~ "lower mesophotic",
+    location=="Curacao" & dband<=180 ~ "upper rariphotic",
+    location=="Curacao" & dband >180 ~ "lower rariphotic",
+    location=="Bonaire" & dband<=30 ~ "altiphotic",
+    location=="Bonaire" & dband<=60 ~ "upper mesophotic",
+    location=="Bonaire" & dband<=110 ~ "lower mesophotic",
+    location=="Bonaire" & dband<=160 ~ "upper rariphotic",
+    location=="Bonaire" & dband >160 ~ "lower rariphotic",
+    location=="Statia" & dband<=90 ~ "upper mesophotic",
+    location=="Statia" & dband<=130 ~ "lower mesophotic",
+    location=="Statia" & dband<=180 ~ "upper rariphotic",
+    location=="Statia" & dband >180 ~ "lower rariphotic",
+    location=="Roatan" & dband<=30 ~ "altiphotic",
+    location=="Roatan" & dband<=90 ~ "upper mesophotic",
+    location=="Roatan" & dband<=140 ~ "lower mesophotic",
+    location=="Roatan" & dband<=180 ~ "upper rariphotic",
+    location=="Roatan" & dband<=300 ~ "lower rariphotic",
+    location=="Roatan" & dband>300 ~ "below rariphotic")) %>%
+  group_by(species.traits,depth.realm) %>%
+  summarize(abundance = sqrt(sum(abundance))) %>%
+  left_join(pca.axes, by="species.traits") %>%
+  select(-"abundance.y") %>%
+  rename("abundance"="abundance.x")%>%
+  mutate(depth.realm=factor(depth.realm,
+          levels=rev(c("altiphotic","upper mesophotic","lower mesophotic",
+                   "upper rariphotic","lower rariphotic","below rariphotic"))))
+
+blue_palette <- c("#BAE0F3","#87CEEB","#6CBDE9","#50ABE7", "#4895EF", "#4361EE", "#2835AF", "#12086F")
+mesoP_palette <- c("#DCEEF3","#C2E2EA","#A7D5E1","#8DC8D8","#72BBCE")
+rariP_palette <- c("#DDC5EB","#BC90DB","#831EB6")
+pal.roa=c("#DCEEF3",blue_palette[1],blue_palette[3],rariP_palette[1],"#831EB6","#12086F")
+
+#### 2.3.1. altiphotic ####
+# Find the convex hull of the points being plotted
+pca.altiphotic <- traits.realms %>%
+  filter(depth.realm=="altiphotic")
+
+hull.altiphotic <- pca.altiphotic %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A2))
+
+# calculate centroid on A1/A2
+centroid.altiphotic <- pca.altiphotic %>%
+  group_by(depth.realm) %>%
+  summarize(A1.centroid=weighted.mean(x=A1,w=abundance),
+            A2.centroid=mean(A2,w=abundance),
+            A3.centroid=mean(A3,w=abundance),
+            A4.centroid=mean(A4,w=abundance))
+
+## scatterplot
+altiphotic.pca.plot <- ggplot(pca.altiphotic, mapping=aes(x = A1, y = A2)) +
+  #overall outline
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  #outline of species present in altiphotic
+  geom_polygon(data=hull.altiphotic,mapping=aes(x = A1, y = A2),
+               alpha=1,fill="#C2E5DF",color="#62D99C",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0.01, height = 0.01) +
+  ggtitle("altiphotic (0-30 m)")+
+  geom_point(data=centroid.altiphotic,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#62D99C",size=5,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.altiphotic$A1.centroid,
+               y=centroid.altiphotic$A2.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.altiphotic$A1.centroid,y=-0.6, 
+               yend=centroid.altiphotic$A2.centroid,color="black",lty="dashed")+
+  #geom_text_repel(pca.axes, mapping=aes(x = A1, y = A2, label = species),
+  #               size = 2, color = "darkblue",max.overlaps = 50) +
+  theme_classic()
+altiphotic.pca.plot
+
+altiphotic.pca.plot+
+  geom_text_repel(mapping=aes(x = A1, y = A2, label = species),
+                  size = 2, color = "darkblue",max.overlaps = 50)
+#### 2.3.2. upper mesophotic ####
+# Find the convex hull of the points being plotted
+pca.upmeso <- traits.realms %>%
+  filter(depth.realm=="upper mesophotic")
+
+hull.upmeso <- pca.upmeso %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A2))
+
+# calculate centroid on A1/A2
+centroid.upmeso <- pca.upmeso %>%
+  group_by(depth.realm) %>%
+  summarize(A1.centroid=weighted.mean(x=A1,w=abundance),
+            A2.centroid=mean(A2,w=abundance),
+            A3.centroid=mean(A3,w=abundance),
+            A4.centroid=mean(A4,w=abundance))
+## scatterplot
+upmeso.pca.plot <- ggplot(pca.upmeso, mapping=aes(x = A1, y = A2)) +
+  #overall outline
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull.upmeso,mapping=aes(x = A1, y = A2),
+               alpha=0.5,fill="#BAE0F3",color="#50ABE7",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0, height = 0) +
+  ggtitle("upper mesophotic (40-90 m)")+
+  geom_point(data=centroid.upmeso,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#BAE0F3",size=5,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.upmeso$A1.centroid,
+               y=centroid.upmeso$A2.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.upmeso$A1.centroid,y=-0.6, 
+               yend=centroid.upmeso$A2.centroid,color="black",lty="dashed")+
+  #geom_text_repel(pca.axes, mapping=aes(x = A1, y = A2, label = species),
+  #               size = 2, color = "darkblue",max.overlaps = 50) +
+  theme_classic()
+upmeso.pca.plot
+
+upmeso.pca.plot+
+  geom_text_repel(mapping=aes(x = A1, y = A2, label = species),
+                  size = 2, color = "darkblue",max.overlaps = 50)
+#### 2.3.3. lower mesophotic ####
+# Find the convex hull of the points being plotted
+pca.lowmeso <- traits.realms %>%
+  filter(depth.realm=="lower mesophotic")
+
+hull.lowmeso <- pca.lowmeso %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A2))
+
+# calculate centroid on A1/A2
+centroid.lowmeso <- pca.lowmeso %>%
+  group_by(depth.realm) %>%
+  summarize(A1.centroid=weighted.mean(x=A1,w=abundance),
+            A2.centroid=mean(A2,w=abundance),
+            A3.centroid=mean(A3,w=abundance),
+            A4.centroid=mean(A4,w=abundance))
+
+## scatterplot
+lowmeso.pca.plot <- ggplot(pca.lowmeso, mapping=aes(x = A1, y = A2)) +
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull.lowmeso,mapping=aes(x = A1, y = A2),
+               alpha=0.5,fill="#6CBDE9",color="#50ABE7",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0, height = 0) +
+  ggtitle("lower mesophotic (100-140 m)")+
+  geom_point(data=centroid.lowmeso,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#50ABE7",size=5,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.lowmeso$A1.centroid,
+               y=centroid.lowmeso$A2.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.lowmeso$A1.centroid,y=-0.6, 
+               yend=centroid.lowmeso$A2.centroid,color="black",lty="dashed")+
+  theme_classic()
+lowmeso.pca.plot
+
+lowmeso.pca.plot+
+  geom_text_repel(mapping=aes(x = A1, y = A2, label = species),
+                  size = 2, color = "darkblue",max.overlaps = 50)
+#### 2.3.4. upper rariphotic ####
+# Find the convex hull of the points being plotted
+pca.uprari <- traits.realms %>%
+  filter(depth.realm=="upper rariphotic")
+
+hull.uprari <- pca.uprari %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A2))
+
+# calculate centroid on A1/A2
+centroid.uprari <- pca.uprari %>%
+  group_by(depth.realm) %>%
+  summarize(A1.centroid=weighted.mean(x=A1,w=abundance),
+            A2.centroid=mean(A2,w=abundance),
+            A3.centroid=mean(A3,w=abundance),
+            A4.centroid=mean(A4,w=abundance))
+
+## scatterplot
+uprari.pca.plot <- ggplot(pca.uprari, mapping=aes(x = A1, y = A2)) +
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull.uprari,mapping=aes(x = A1, y = A2),
+               alpha=0.5,fill="#DDC5EB",color="#831EB6",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0.01, height = 0.01) +
+  ggtitle("upper rariphotic (140-190 m)")+
+  geom_point(data=centroid.uprari,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#DDC5EB",size=5,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.uprari$A1.centroid,
+               y=centroid.uprari$A2.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.uprari$A1.centroid,y=-0.6, 
+               yend=centroid.uprari$A2.centroid,color="black",lty="dashed")+
+  theme_classic()
+uprari.pca.plot 
+
+uprari.pca.plot +
+  geom_text_repel(mapping=aes(x = A1, y = A2, label = species),
+                  size = 2, color = "darkblue",max.overlaps = 50)
+#### 2.3.5. lower rariphotic ####
+# Find the convex hull of the points being plotted
+pca.lowrari <- traits.realms %>%
+  filter(depth.realm=="lower rariphotic")
+
+hull.lowrari <- pca.lowrari %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A2))
+
+# calculate centroid on A1/A2
+centroid.lowrari <- pca.lowrari %>%
+  group_by(depth.realm) %>%
+  summarize(A1.centroid=weighted.mean(x=A1,w=abundance),
+            A2.centroid=mean(A2,w=abundance),
+            A3.centroid=mean(A3,w=abundance),
+            A4.centroid=mean(A4,w=abundance))
+
+## scatterplot
+lowrari.pca.plot <- ggplot(pca.lowrari, mapping=aes(x = A1, y = A2)) +
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull.lowrari,mapping=aes(x = A1, y = A2),
+               alpha=0.5,fill="#831EB6",color="#831EB6",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0.01, height = 0.01) +
+  ggtitle("lower rariphotic (210-300 m)") +
+  geom_point(data=centroid.lowrari,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#831EB6",size=5,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.lowrari$A1.centroid,
+               y=centroid.lowrari$A2.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.lowrari$A1.centroid,y=-0.6, 
+               yend=centroid.lowrari$A2.centroid,color="black",lty="dashed")+
+  theme_classic()
+lowrari.pca.plot
+
+lowrari.pca.plot+
+  geom_text_repel(mapping=aes(x = A1, y = A2, label = species),
+                  size = 2, color = "darkblue",max.overlaps = 50)
+#### 2.3.6. deep sea ####
+# Find the convex hull of the points being plotted
+pca.deepsea <- traits.realms %>%
+  filter(depth.realm=="below rariphotic")
+
+hull.deepsea <- pca.deepsea %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A2))
+
+# calculate centroid on A1/A2
+centroid.deepsea <- pca.deepsea %>%
+  group_by(depth.realm) %>%
+  summarize(A1.centroid=weighted.mean(x=A1,w=abundance),
+            A2.centroid=mean(A2,w=abundance),
+            A3.centroid=mean(A3,w=abundance),
+            A4.centroid=mean(A4,w=abundance))
+
+## scatterplot
+pca.deepsea.plot <- ggplot(pca.deepsea, mapping=aes(x = A1, y = A2)) +
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull.deepsea,mapping=aes(x = A1, y = A2),
+               alpha=0.5,fill="#12086F",color="#12086F",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0.01, height = 0.01) +
+  ggtitle("deep sea (310-480 m)")+
+  geom_point(data=centroid.deepsea,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#12086F",size=7,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.deepsea$A1.centroid,
+               y=centroid.deepsea$A2.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.deepsea$A1.centroid,y=-0.6, 
+               yend=centroid.deepsea$A2.centroid,color="black",lty="dashed")+
+  theme_classic()
+pca.deepsea.plot
+
+pca.deepsea.plot+
+  geom_text_repel(mapping=aes(x = A1, y = A2, label = species),
+                                 size = 4, color = "black",max.overlaps = 50)
+
+#### 2.4. Examining specific functional entities ####
+func.groups <- as.data.frame(fd.all$spfgr) %>%
+  mutate(species.traits=row.names(.))%>%
+  rename("group.nb"=1) %>%
+  right_join(traits.realms) %>%
+  mutate(depth.realm=factor(depth.realm,levels=rev(levels(depth.realm))))
+
+## functional groups with most nb of species
+func.groups %>%
+  group_by(group.nb,species)%>%
+  summarize(nb.species=1) %>%
+  group_by(group.nb)%>%
+  summarize(nb.species=n())%>%
+  arrange(desc(nb.species))
+
+### carnivorous, medium-sized, benthic species
+pred.nb <- func.groups[func.groups$species.traits=="Cephalopholis fulva","group.nb"][1]
+predators <- func.groups %>%
+  filter(group.nb==pred.nb) %>%
+  group_by(depth.realm) %>%
+  summarize(nb.species=n(),abundance=sum(abundance)) %>%
+  mutate(nb.families=c(2,4,4,6,7,1))
+
+ggplot(predators)+
+  geom_bar(mapping=aes(x=depth.realm,y=nb.species),
+           stat="identity",position="stack", fill="#008ECC")+
+  geom_bar(mapping=aes(x=depth.realm,y=nb.families),
+           stat="identity",position="stack", fill="#003152")+
+  theme_classic()+
+  theme(axis.line.x =element_blank() )+
+  #scale_y_continuous(position="right")+
+  xlab("")+
+  ggtitle("medium-sized bottom predator")+
+  ylab("redundancy")
+
+
+## near-bottom, solitary, extra-small planktivore
+lipo.nb <- func.groups[func.groups$species.traits=="Lipogramma barrettorum","group.nb"][1]
+lipo <- func.groups %>%
+  filter(group.nb==lipo.nb) %>%
+  group_by(depth.realm)%>%
+  summarize(nb.species=n(),
+            abundance=sum(abundance))%>%
+  right_join(data.frame(depth.realm=levels(func.groups$depth.realm))) %>%
+  mutate(depth.realm=factor(depth.realm,levels=levels(func.groups$depth.realm)),
+         nb.families=c(1,1,1,1,0.01,0.01))
+
+ggplot(lipo)+
+  geom_bar(mapping=aes(x=depth.realm,y=nb.species),
+           stat="identity",position="stack", fill="#008ECC")+
+  geom_bar(mapping=aes(x=depth.realm,y=nb.families),
+           stat="identity",position="stack", fill="#003152")+
+  #scale_y_continuous(position="right")+
+  theme_classic()+
+  theme(axis.line.x =element_blank() )+
+  xlab("")+
+  #ggtitle("near-bottom, solitary, extra-small planktivores")+
+  ylab("")
+
+####.---FIG 4 LEFT : joint PCoA by depth affinity ####
+pca.predominance <- ggplot(pca.axes, aes(x = A1, y = A2,size=abundance)) +
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="white",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull,alpha=0.3,mapping=aes(fill=predominance),
+               linewidth=0.7)+
+  scale_fill_manual(values=c("#62D99C","#619CFF","#C77CFF","#831EB6","#12086F","darkgrey"))+
+  scale_color_manual(values=c("#62D99C","#619CFF","#C77CFF","#831EB6","#12086F"))+
+  geom_jitter(width = 0.01, height = 0.01,shape=21,color="grey",
+              mapping=aes(fill=predominance)) +
+  geom_polygon(data=hull,alpha=0.3,mapping=aes(color=predominance),
+               linewidth=0.7,fill=NA)+
+  geom_point(data=centroids,mapping=aes(x=A1.centroid, y=A2.centroid,fill=predominance),
+             shape=23,color="white",size=5,stroke=1)+
+  theme_classic()+
+  ggtitle("trait space by depth affinity group")
+
+A1.density <- ggplot(data = pca.axes %>% filter(predominance!="unknown"),
+                     aes(x = A1, fill = predominance, colour = predominance, 
+                         weight=abundance)) + #weights the density plot by abundance
+  geom_density(alpha = 0.1) +
+  scale_x_continuous(expand = c(0, 0)) +  # Remove padding on x-axis
+  scale_y_continuous(expand = c(0, 0.02)) + 
+  scale_color_manual(values=c("#62D99C","#619CFF","#C77CFF","#831EB6","#12086F"))+
+  scale_fill_manual(values=c("#62D99C","#619CFF","#C77CFF","#831EB6","#12086F"))+
+  theme_classic()
+
+A2.density <- ggplot(data = pca.axes %>% filter(predominance!="unknown"),
+                     aes(x = A2, fill = predominance, colour = predominance, 
+                         weight=abundance)) + #weights the density plot by abundance
+  geom_density(alpha = 0.1) +
+  scale_x_continuous(expand = c(0, 0)) +  # Remove padding on x-axis
+  scale_y_continuous(expand = c(0, 0.02)) + 
+  scale_color_manual(values=c("#62D99C","#619CFF","#C77CFF","#831EB6","#12086F"))+
+  scale_fill_manual(values=c("#62D99C","#619CFF","#C77CFF","#831EB6","#12086F"))+
+  theme_classic()+
+  coord_flip()
+
+pca.predominance %>%
+  insert_xaxis_grob(A1.density, grid::unit(1, "in"), position = "top") %>%
+  insert_yaxis_grob(A2.density, grid::unit(1, "in"), position = "right") %>%
+  ggdraw()
+
+#### .---  PCoA panels by depth affinity ####
+pca.AM <- ggplot(pca.axes %>% filter(predominance=="AM"), aes(x = A1, y = A2)) +
+  #overall outline
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="white",
+               color="darkgrey",linewidth=0.7)+
+  #outline of alti/meso predominant species
+  geom_polygon(data=hull%>%filter(predominance=="AM"),
+               alpha=0.5,linewidth=0.5,fill="#62D99C",color="#62D99C")+
+  #outline of species present in altiphotic
+  geom_polygon(data=hull.altiphotic,mapping=aes(x = A1, y = A2),
+               alpha=1,fill=NA,color="black",linewidth=0.5,lty="longdash")+
+  #adding species as points
+  geom_jitter(mapping=aes(size=abundance),shape=21,
+              width = 0.01, height = 0.01,color="#C2E5DF",fill="black") +
+  scale_size_continuous(limits = c(1, 100))+ #ensuring common size scale across graphs
+  ggtitle("altiphotic/mesophotic")+
+  scale_x_continuous(expand = c(0.01, 0.01),limits = c(-0.4,0.7)) +  # Remove padding on x-axis
+  scale_y_continuous(expand = c(0.01, 0.01)) + 
+  geom_segment(data=centroids %>% filter(predominance=="AM"),
+               mapping=aes(x=-0.4,xend=A1.centroid,y=A2.centroid),color="black",
+               lty="dotted",size=0.5)+
+  geom_segment(data=centroids %>% filter(predominance=="AM"),
+               mapping=aes(y=-0.6,yend=A2.centroid,x=A1.centroid),
+               color="black",lty="dotted",size=0.5)+
+  geom_point(data=centroids %>% filter(predominance=="AM"),mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#62D99C",size=7,stroke=1)+
+  theme_classic()
+pca.AM
+
+pca.M <- ggplot(pca.axes %>% filter(predominance=="M"), mapping=aes(x = A1, y = A2)) +
+  #overall outline
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="white",
+               color="darkgrey",linewidth=0.7)+
+  #outline of alti/meso predominant species
+  geom_polygon(data=hull%>%filter(predominance=="M"),
+               alpha=0.5,linewidth=0.5,fill="#619CFF",colour="#619CFF")+
+  #outline of species present in altiphotic
+  geom_polygon(data=hull.upmeso,mapping=aes(x = A1, y = A2),
+               alpha=1,fill=NA,color="black",linewidth=0.5,lty="longdash")+
+  #adding species as points
+  geom_jitter(mapping=aes(size=abundance),shape=21,
+              width = 0.01, height = 0.01,color="#619CFF",fill="black") +
+  scale_size_continuous(limits = c(1, 100))+ #ensuring common size scale across graphs
+  ggtitle("mesophotic")+
+  scale_x_continuous(expand = c(0.01, 0.01),limits = c(-0.4,0.7)) +  # Remove padding on x-axis
+  scale_y_continuous(expand = c(0.01, 0.01)) + 
+  geom_segment(data=centroids %>% filter(predominance=="M"),
+               mapping=aes(x=-0.4,xend=A1.centroid,y=A2.centroid),color="black",
+               lty="dotted",size=0.5)+
+  geom_segment(data=centroids %>% filter(predominance=="M"),
+               mapping=aes(y=-0.6,yend=A2.centroid,x=A1.centroid),
+               color="black",lty="dotted",size=0.5)+
+  geom_point(data=centroids %>% filter(predominance=="M"),mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#619CFF",size=7,stroke=1)+
+  theme_classic()
+pca.M
+
+pca.MR <- ggplot(pca.axes %>% filter(predominance=="MR"),aes(x = A1, y = A2)) +
+  #overall outline
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="white",
+               color="darkgrey",linewidth=0.7)+
+  #outline of alti/meso predominant species
+  geom_polygon(data=hull%>%filter(predominance=="MR"),
+               alpha=0.5,linewidth=0.5,fill="#C77CFF",colour="#C77CFF")+
+  #outline of species present in altiphotic
+  geom_polygon(data=hull.uprari,mapping=aes(x = A1, y = A2),
+               alpha=1,fill=NA,color="black",linewidth=0.5,lty="longdash")+
+  #adding species as points
+  geom_jitter(mapping=aes(size=abundance),shape=21,
+              width = 0.01, height = 0.01,color="#C77CFF",fill="black") +
+  scale_size_continuous(limits = c(1, 100))+ #ensuring common size scale across graphs
+  ggtitle("mesophotic/rariphotic")+
+  scale_x_continuous(expand = c(0.01, 0.01),limits = c(-0.4,0.7)) +  # Remove padding on x-axis
+  scale_y_continuous(expand = c(0.01, 0.01)) + 
+  geom_segment(data=centroids %>% filter(predominance=="MR"),
+               mapping=aes(x=-0.4,xend=A1.centroid,y=A2.centroid),color="black",lty="dotted",size=0.3)+
+  geom_segment(data=centroids %>% filter(predominance=="MR"),
+               mapping=aes(y=-0.6,yend=A2.centroid,x=A1.centroid),
+               color="black",lty="dotted",size=0.3)+
+  geom_point(data=centroids %>% filter(predominance=="MR"),mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#C77CFF",size=7,stroke=1)+
+  theme_classic()
+pca.MR
+
+pca.R <- ggplot(pca.axes %>% filter(predominance=="R"), mapping=aes(x = A1, y = A2)) +
+  #overall outline
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="white",
+               color="darkgrey",linewidth=0.7)+
+  #outline of alti/meso predominant species
+  geom_polygon(data=hull%>%filter(predominance=="R"),
+               alpha=0.5,linewidth=0.5,fill="#831EB6",color="#831EB6")+
+  #outline of species present in rariphotic
+  geom_polygon(data=hull.lowrari,mapping=aes(x = A1, y = A2),
+               alpha=1,fill=NA,color="black",linewidth=0.5,lty="longdash")+
+  #adding species as points
+  geom_jitter(mapping=aes(size=abundance),shape=21,
+              width = 0.01, height = 0.01,color="#831EB6",fill="black") +
+  scale_size_continuous(limits = c(1, 100))+ #ensuring common size scale across graphs
+  ggtitle("rariphotic")+
+  scale_x_continuous(expand = c(0.01, 0.01),limits = c(-0.4,0.7)) +  # Remove padding on x-axis
+  scale_y_continuous(expand = c(0.01, 0.01)) + 
+  geom_segment(data=centroids %>% filter(predominance=="R"),
+               mapping=aes(x=-0.4,xend=A1.centroid,y=A2.centroid),color="black",lty="dotted",size=0.3)+
+  geom_segment(data=centroids %>% filter(predominance=="R"),
+               mapping=aes(y=-0.6,yend=A2.centroid,x=A1.centroid),
+               color="black",lty="dotted",size=0.3)+
+  geom_point(data=centroids %>% filter(predominance=="R"),mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#831EB6",size=7,stroke=1)+
+  theme_classic()
+pca.R
+
+pca.DS <- ggplot(pca.axes %>% filter(predominance=="DS"), mapping=aes(x = A1, y = A2)) +
+  #overall outline
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="white",
+               color="darkgrey",linewidth=0.7)+
+  #outline of deep sea predominant species
+  geom_polygon(data=hull%>%filter(predominance=="DS"),
+               alpha=0.5,linewidth=0.5,fill="#12086F",color="#12086F")+
+  #outline of species present in rariphotic
+  geom_polygon(data=hull.deepsea,mapping=aes(x = A1, y = A2),
+               alpha=1,fill=NA,color="black",linewidth=0.5,lty="longdash")+
+  #adding species as points
+  geom_jitter(mapping=aes(size=abundance),shape=21,
+              width = 0.01, height = 0.01,color="#12086F",fill="black") +
+  scale_size_continuous(limits = c(1, 100))+ #ensuring common size scale across graphs
+  ggtitle("deep-sea")+
+  scale_x_continuous(expand = c(0.01, 0.01),limits = c(-0.4,0.7)) +  # Remove padding on x-axis
+  scale_y_continuous(expand = c(0.01, 0.01)) + 
+  #centroid
+  geom_segment(data=centroids %>% filter(predominance=="DS"),
+               mapping=aes(x=-0.4,xend=A1.centroid,y=A2.centroid),color="black",
+               lty="dotted",size=0.5)+
+  geom_segment(data=centroids %>% filter(predominance=="DS"),
+               mapping=aes(y=-0.6,yend=A2.centroid,x=A1.centroid),
+               color="black",lty="dotted",size=0.5)+
+  geom_point(data=centroids %>% filter(predominance=="DS"),mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#12086F",size=7,stroke=1)+
+  theme_classic()
+pca.DS
+####.--- FIG 2 RIGHT: pictograms of functional metrics ####
+### functional richness
+# altiphotic
+ggplot(pca.axes, aes(x = A1, y = A2,size=abundance)) +
+  geom_polygon(data=hull.outline,alpha=0.5,fill="#E7B800",color="black",linewidth=0.7)+
+  geom_jitter(width = 0.01, height = 0.01,size=0.01) +
+  xlab("")+
+  ylab("")+
+  theme_classic()+
+  theme(axis.text=element_blank())
+
+# deep sea
+ggplot(pca.deepsea, aes(x = A1, y = A2)) +
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="white",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull.deepsea,alpha=0.5,fill="#E7B800",color="black",linewidth=0.7)+
+  geom_jitter(width = 0.01, height = 0.01,size=0.01) +
+  xlab("")+
+  ylab("")+
+  theme_classic()+
+  theme(axis.text=element_blank())
+
+#### functional dispersion
+ggscatter(pca.axes, x = "A1", y = "A2", 
+          #palette = pal,
+          size = 0.8,
+          color="#E7B800",
+          shape=21,
+          fill="black",
+          ellipse.alpha = 0.2,
+          #label=pca.axes$species,
+          star.plot = TRUE,
+          #star.plot.lty="dotted",
+          star.plot.lwd = 0.1,
+          repel = TRUE)
+
+ggscatter(pca.deepsea, x = "A1", y = "A2", 
+          size = 0.8, color="#E7B800", shape=21, fill="black",
+          ellipse.alpha = 0.2, star.plot = TRUE, star.plot.lwd = 0.5, repel = TRUE)
+
+#### functional evenness
+library(FNN)
+nn <- get.knn(pca.axes[, c("A1", "A2")], k = 4)
+
+# Create a data frame for links
+links <- data.frame(
+  x1 = pca.axes$A1,
+  y1 = pca.axes$A2,
+  x2 = pca.axes$A1[nn$nn.index],
+  y2 = pca.axes$A2[nn$nn.index])
+
+ggplot() +
+  # Add edges (links between nearest neighbors)
+  geom_segment(data = links, aes(x = x1, y = y1, xend = x2, yend = y2), color = "#E7B800",lwd=1) +
+  # Add points
+  geom_point(data = pca.axes, aes(x = A1, y = A2), color = "black", size = 0.3) +
+  # Customize theme
+  theme_classic() +
+  labs(x = "", y = "")
+
+nn <- get.knn(pca.deepsea[, c("A1", "A2")], k = 2)
+links <- data.frame(
+  x1 = pca.deepsea$A1,
+  y1 = pca.deepsea$A2,
+  x2 = pca.deepsea$A1[nn$nn.index],
+  y2 = pca.deepsea$A2[nn$nn.index])
+
+ggplot() +
+  # Add edges (links between nearest neighbors)
+  geom_segment(data = links, aes(x = x1, y = y1, xend = x2, yend = y2), color = "#E7B800",lwd=1) +
+  # Add points
+  geom_point(data = pca.deepsea, aes(x = A1, y = A2), color = "black", size = 0.3) +
+  # Customize theme
+  theme_classic() +
+  labs(x = "", y = "")
+
+ggplot(pca.axes, aes(x = A1, y = A2,size=abundance)) +
+  #geom_polygon(data=hull,alpha=0.5,fill="lightblue",color="grey",linewidth=0.7)+
+  geom_jitter(width = 0.01, height = 0.01,size=0.05) +
+  geom_line(color="#E7B800",linewidth=0.4)+
+  #geom_text_repel(pca.axes, mapping=aes(x = A1, y = A2, label = species),
+  #               size = 2, color = "darkblue",max.overlaps = 50) +
+  theme_classic()
+
+
+#### 2.4. Again but with different PCA axes #### 
+## Find the convex hull of the points being plotted
+hull.outline2 <- pca.axes %>% # for all species
+  slice(chull(A1, A3))
+
+# calculate coordinates of main vectors
+trait.vectors2 <- as.data.frame(cor(all.traits.rn, pca.axes[, 1:3]))%>%
+  mutate(trait=rownames(.), cor_sum=abs(A1)+abs(A3)) %>%
+  arrange(desc(cor_sum)) %>%        
+  slice_head(n = 8) %>%
+  #rescaling correlations [0 to 1] to the PCA axes scale
+  mutate(A1=case_when(A1<0~A1*abs(min(pca.axes$A1)), A1>0~A1*abs(max(pca.axes$A1))),
+         A2=case_when(A3<0~A3*abs(min(pca.axes$A3)), A3>0~A3*abs(max(pca.axes$A3))),
+         trait=case_when(trait=="size_m"~"medium size",
+                         trait=="mobility_between.reef.mob"~"between-reef mobility",
+                         trait=="repro_benthic.eggs"~"benthic eggs",
+                         trait=="mobility_sedentary"~"sedentary",
+                         trait=="position_Bottom"~"bottom",
+                         trait=="size_xs"~"extra-small size",
+                         trait=="repro_pelagic.eggs"~"pelagic eggs",
+                         trait=="mobility_within.reef.mob"~"within-reef mobility"))
+
+
+#### altiphotic
+hull.altiphotic2 <- pca.altiphotic %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A3))
+
+altiphotic.pca2.plot <- ggplot(pca.altiphotic, mapping=aes(x = A1, y = A3)) +
+  #overall outline
+  geom_polygon(data=hull.outline2,mapping=aes(x = A1, y = A3),alpha=0.5,fill="white",
+               color="darkgrey",linewidth=0.7)+
+  #outline of species present in altiphotic
+  geom_polygon(data=hull.altiphotic2,mapping=aes(x = A1, y = A3),
+               alpha=1,fill="#C2E5DF",color="#62D99C",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0.01, height = 0.01) +
+  ggtitle("altiphotic (0-30 m)")+
+  geom_point(data=centroid.altiphotic,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#62D99C",size=5,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.altiphotic$A1.centroid,
+               y=centroid.altiphotic$A3.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.altiphotic$A1.centroid,y=-0.6, 
+               yend=centroid.altiphotic$A3.centroid,color="black",lty="dashed")+
+  #geom_text_repel(pca.axes, mapping=aes(x = A1, y = A2, label = species),
+  #               size = 2, color = "darkblue",max.overlaps = 50) +
+  theme_classic()+
+  theme(plot.title = element_text(size = 10))
+altiphotic.pca2.plot
+
+#### upper mesophotic
+hull.upmeso2 <- pca.upmeso %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A3))
+
+## scatterplot
+upmeso.pca2.plot <- ggplot(pca.upmeso, mapping=aes(x = A1, y = A3)) +
+  #overall outline
+  geom_polygon(data=hull.outline2,mapping=aes(x = A1, y = A3),alpha=0.5,fill="white",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull.upmeso2,mapping=aes(x = A1, y = A3),
+               alpha=0.5,fill="#BAE0F3",color="#50ABE7",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0, height = 0) +
+  ggtitle("upper mesophotic (40-90 m)")+
+  geom_point(data=centroid.upmeso,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#BAE0F3",size=5,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.upmeso$A1.centroid,
+               y=centroid.upmeso$A3.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.upmeso$A1.centroid,y=-0.6, 
+               yend=centroid.upmeso$A3.centroid,color="black",lty="dashed")+
+  #geom_text_repel(pca.axes, mapping=aes(x = A1, y = A3, label = species),
+  #               size = 2, color = "darkblue",max.overlaps = 50) +
+  theme_classic()+
+  theme(plot.title = element_text(size = 10))
+upmeso.pca2.plot
+
+#### lower mesophotic
+# Find the convex hull of the points being plotted
+hull.lowmeso2 <- pca.lowmeso %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A3))
+
+## scatterplot
+lowmeso.pca2.plot <- ggplot(pca.lowmeso, mapping=aes(x = A1, y = A3)) +
+  geom_polygon(data=hull.outline2,mapping=aes(x = A1, y = A3),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull.lowmeso2,mapping=aes(x = A1, y = A3),
+               alpha=0.5,fill="#6CBDE9",color="#50ABE7",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0, height = 0) +
+  ggtitle("lower mesophotic (100-140 m)")+
+  geom_point(data=centroid.lowmeso,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#50ABE7",size=5,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.lowmeso$A1.centroid,
+               y=centroid.lowmeso$A3.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.lowmeso$A1.centroid,y=-0.6, 
+               yend=centroid.lowmeso$A3.centroid,color="black",lty="dashed")+
+  theme_classic()+
+  theme(plot.title = element_text(size = 10))
+lowmeso.pca2.plot
+
+#### upper rariphotic
+hull.uprari2 <- pca.uprari %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A3))
+
+uprari.pca2.plot <- ggplot(pca.uprari, mapping=aes(x = A1, y = A3)) +
+  geom_polygon(data=hull.outline2,mapping=aes(x = A1, y = A3),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull.uprari2,mapping=aes(x = A1, y = A3),
+               alpha=0.5,fill="#DDC5EB",color="#831EB6",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0.01, height = 0.01) +
+  ggtitle("upper rariphotic (140-190 m)")+
+  geom_point(data=centroid.uprari,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#DDC5EB",size=5,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.uprari$A1.centroid,
+               y=centroid.uprari$A3.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.uprari$A1.centroid,y=-0.6, 
+               yend=centroid.uprari$A3.centroid,color="black",lty="dashed")+
+  theme_classic()+
+  theme(plot.title = element_text(size = 10))
+uprari.pca2.plot 
+
+#### lower rariphotic
+# Find the convex hull of the points being plotted
+hull.lowrari2 <- pca.lowrari %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A3))
+
+lowrari.pca2.plot <- ggplot(pca.lowrari, mapping=aes(x = A1, y = A3)) +
+  geom_polygon(data=hull.outline2,mapping=aes(x = A1, y = A3),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull.lowrari2,mapping=aes(x = A1, y = A3),
+               alpha=0.5,fill="#831EB6",color="#831EB6",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0.01, height = 0.01) +
+  ggtitle("lower rariphotic (210-300 m)") +
+  geom_point(data=centroid.lowrari,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#831EB6",size=5,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.lowrari$A1.centroid,
+               y=centroid.lowrari$A3.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.lowrari$A1.centroid,y=-0.6, 
+               yend=centroid.lowrari$A3.centroid,color="black",lty="dashed")+
+  theme_classic()+
+  theme(plot.title = element_text(size = 10))
+lowrari.pca2.plot
+
+#### deep sea
+hull.deepsea2 <- pca.deepsea %>%
+  ungroup() %>%
+  select(-c(`depth.realm`,`abundance`)) %>%
+  slice(chull(A1, A3))
+
+pca2.deepsea.plot <- ggplot(pca.deepsea, mapping=aes(x = A1, y = A3)) +
+  geom_polygon(data=hull.outline2,mapping=aes(x = A1, y = A3),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_polygon(data=hull.deepsea2,mapping=aes(x = A1, y = A3),
+               alpha=0.5,fill="#12086F",color="#12086F",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),
+              width = 0.01, height = 0.01) +
+  ggtitle("deep sea (310-480 m)")+
+  geom_point(data=centroid.deepsea,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#12086F",size=7,stroke=1)+
+  geom_segment(x=-0.4,xend=centroid.deepsea$A1.centroid,
+               y=centroid.deepsea$A3.centroid,color="black",lty="dashed")+
+  geom_segment(x=centroid.deepsea$A1.centroid,y=-0.6, 
+               yend=centroid.deepsea$A3.centroid,color="black",lty="dashed")+
+  theme_classic()+
+  theme(plot.title = element_text(size = 10))
+pca2.deepsea.plot
+
+# 6 panels of depth zones 
+ggarrange(altiphotic.pca2.plot + rremove("xlab"),upmeso.pca2.plot+ rremove("xlab")+ rremove("ylab"),
+          lowmeso.pca2.plot+ rremove("xlab"),uprari.pca2.plot+ rremove("xlab")+ rremove("ylab"),
+          lowrari.pca2.plot,pca2.deepsea.plot+ rremove("ylab"),
+          ncol = 2,nrow=3,common.legend=TRUE,legend="bottom")
+
+# overall pca figure
+ggplot() +
+  geom_polygon(data=hull.outline2,mapping=aes(x = A1, y = A3),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_jitter(pca.axes, mapping=aes(x = A1, y = A3,size=abundance),color="black") +
+  ggtitle("trait space across depths (0-480 m)")+
+  geom_segment(data=trait.vectors2,mapping=aes(x=0,y=0,xend=A1,yend=A3),
+               arrow=arrow(length=unit(0.2,"cm")),color="darkblue",size=0.9)+
+  geom_label_repel(data = trait.vectors2, 
+                   aes(x = A1, y = A3, label = trait),fill="lightyellow",label.size=0,
+                   size=4,hjust=0,vjust=0.5)+ 
+  geom_point(data=centroid.altiphotic,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#62D99C",size=7,stroke=1)+
+  geom_point(data=centroid.upmeso,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#BAE0F3",size=7,stroke=1)+
+  geom_point(data=centroid.lowmeso,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#50ABE7",size=7,stroke=1)+
+  geom_point(data=centroid.uprari,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#DDC5EB",size=7,stroke=1)+
+  geom_point(data=centroid.lowrari,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#831EB6",size=7,stroke=1)+
+  geom_point(data=centroid.deepsea,mapping=aes(x=A1.centroid, y=A3.centroid),
+             shape=23,color="white",fill="#12086F",size=7,stroke=1)+
+  scale_x_continuous(expand = c(0.01, 0.03)) +  # Remove padding on x-axis
+  scale_y_continuous(expand = c(0.01, 0.03)) + 
+  coord_cartesian(clip="off")+
+  theme_classic()
+
+
+#### 3. Hierarchical clustering ####
+trait.clustering <- read.csv("file.all.fish.to.2024.csv") %>%
+  mutate(dband = case_when(dband >= 310 & dband <= 330 ~ 320,
+                                   dband >= 340 & dband <= 360 ~ 350,
+                                   dband >= 370 & dband <= 390 ~ 380,
+                                   dband >= 400 & dband <= 420 ~ 410,
+                                   dband >= 430 & dband <= 450 ~ 440,
+                                   dband >= 460 & dband <= 480 ~ 470,
+                                   TRUE~dband)) %>%
+  group_by(species.traits,dband) %>%
+  summarize(abundance = sqrt(sum(abu.corr))) %>%
+  left_join(all.traits, by="species.traits") %>%
+  group_by(dband) %>%
+  # sum values of columns across rows, with abundance as weight 
+  summarize(across(c(4:33), ~sum(.*abundance))) 
+
+trait.cl <- as.data.frame(trait.clustering)
+rownames(trait.cl) <- trait.clustering$dband
+trait.cl <- trait.cl[-c(1)] # removes depth columns
+
+trait.simprof <- simprof(data = trait.cl, method.cluster = "ward.D", method.distance="braycurtis",
+                        method.transform="identity", alpha=0.0000001,
+                        sample.orientation="row", const=0,
+                        silent=TRUE, increment=100,
+                        undef.zero=TRUE, warn.braycurtis=TRUE)
+
+
+trait.cl.veg <- hclust(vegdist(trait.cl, method = "bray"), method = "ward.D")
+
+trait.dend <- as.dendrogram(trait.cl.veg)
+trait.dend.data <- dendro_data(trait.dend, type = "rectangle")
+#trait.dend.data$labels <- trait.clustering$dband
+
+ggplot() + 
+  geom_rect(mapping=aes(xmin=25.7,xmax=37.3,ymin=-0.5, ymax=1.9),fill="#831EB6",alpha=0.5)+
+  geom_rect(mapping=aes(xmin=7.7,xmax=19.3,ymin=-0.5, ymax=1.9),fill="#50ABE7" ,alpha=0.8)+
+  geom_rect(mapping=aes(xmin=0.7,xmax=7.3,ymin=-0.5, ymax=1.9),fill="#DDC5EB",alpha=0.8)+
+  geom_rect(mapping=aes(xmin=19.7,xmax=25.3,ymin=-0.5, ymax=1.9),fill="#12086F",alpha=0.5)+
+  
+  geom_segment(aes(x=0.8,xend=3.2,y=-0.6,yend=-0.6),size=1)+
+  geom_segment(aes(x=3.8,xend=7.2,y=-0.6,yend=-0.6),size=1)+
+  geom_segment(aes(x=7.8,xend=8.2,y=-0.6,yend=-0.6),size=1)+
+  geom_segment(aes(x=8.8,xend=10.2,y=-0.6,yend=-0.6),size=1)+
+  geom_segment(aes(x=10.8,xend=12.2,y=-0.6,yend=-0.6),size=1)+
+  geom_segment(aes(x=12.8,xend=14.2,y=-0.6,yend=-0.6),size=1)+
+  geom_segment(aes(x=14.8,xend=19.2,y=-0.6,yend=-0.6),size=1)+
+  geom_segment(aes(x=19.8,xend=21.2,y=-0.6,yend=-0.6),size=1)+
+  geom_segment(aes(x=21.8,xend=25.2,y=-0.6,yend=-0.6),size=1)+
+  geom_segment(aes(x=25.8,xend=30.2,y=-0.6,yend=-0.6),size=1)+
+  geom_segment(aes(x=30.8,xend=32.2,y=-0.6,yend=-0.6),size=1)+
+  geom_segment(aes(x=32.8,xend=37.2,y=-0.6,yend=-0.6),size=1)+
+  
+  geom_segment(data=trait.dend.data$segments,aes(x = x, y = y, xend = xend, yend = yend), color = "black")+
+  geom_text(data = trait.dend.data$labels, aes(x, y, label = label),
+            hjust = 0,  size = 2.5, fontface = "bold") +
+  #scale_color_manual(values=new.pal)+
+  theme_bw() +
+  theme(legend.position = "top",
+        line = element_blank(),
+        title = element_blank(),
+        axis.line = element_blank(),
+        axis.text = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        plot.margin = unit(c(0,0,0,1),"lines"))+
+  coord_flip()+
+  scale_y_reverse(limits=c(13,-0.6))
+  
+#### 3.2. SIMPER ####
+simper.groups <- trait.clustering %>%
+  mutate(group=case_when(dband<40 ~ "altiphotic",
+                         dband<140 & dband>=40~"mesophotic",
+                         dband<190 & dband>=140 ~ "up rari",
+                         dband<310 & dband>=190 ~ "low rari",
+                         dband>=310 ~ "below rari"))
+
+
+adonis2(trait.cl~simper.groups$group)
+simper.results <- simper(trait.cl, simper.groups$group) 
+summary(simper.results)
+
+#### .------------summary figures------------- ####
+#-------------- 6 panels of depth zones -------------
+ggarrange(altiphotic.pca.plot + rremove("xlab"),upmeso.pca.plot+ rremove("xlab")+ rremove("ylab"),
+          lowmeso.pca.plot+ rremove("xlab"),uprari.pca.plot+ rremove("xlab")+ rremove("ylab"),
+          lowrari.pca.plot,pca.deepsea.plot+ rremove("ylab"),
+          ncol = 2,nrow=3,common.legend=TRUE,legend="bottom")
+
+#--------------FIG 4 RIGHT: 5 panel of depth affinity-----------------
+ggarrange(pca.AM + rremove("xlab"),pca.M+ rremove("xlab")+ rremove("ylab"),
+          pca.MR+ rremove("xlab"),pca.R+ rremove("xlab")+ rremove("ylab"),
+          pca.DS+rremove("ylab"),align="v",
+          ncol = 2,nrow=3,common.legend=TRUE,legend="bottom")
+
+#-------------- PCA + centroids  -------------
+pca.centroids <- ggplot() +
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_jitter(pca.axes, mapping=aes(x = A1, y = A2,size=abundance),color="#3E454B") +
+  ggtitle("centroids by depth zones")+
+  
+  geom_point(data=centroid.altiphotic,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#62D99C",size=6,stroke=1)+
+  geom_segment(aes(x=-0.4,xend=centroid.altiphotic$A1.centroid,
+               y=centroid.altiphotic$A2.centroid),color="black",lty="dashed")+
+  geom_segment(aes(x=centroid.altiphotic$A1.centroid,y=-0.6, 
+               yend=centroid.altiphotic$A2.centroid),color="black",lty="dashed")+  
+  geom_point(data=centroid.upmeso,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#BAE0F3",size=6,stroke=1)+
+  geom_segment(aes(x=-0.4,xend=centroid.upmeso$A1.centroid,
+               y=centroid.upmeso$A2.centroid),color="black",lty="dashed")+
+  geom_segment(aes(x=centroid.upmeso$A1.centroid,y=-0.6, 
+               yend=centroid.upmeso$A2.centroid),color="black",lty="dashed")+  
+  geom_point(data=centroid.lowmeso,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#50ABE7",size=6,stroke=1)+
+  geom_segment(aes(x=-0.4,xend=centroid.lowmeso$A1.centroid,
+               y=centroid.lowmeso$A2.centroid),color="black",lty="dashed")+
+  geom_segment(aes(x=centroid.lowmeso$A1.centroid,y=-0.6, 
+               yend=centroid.lowmeso$A2.centroid),color="black",lty="dashed")+  
+  geom_point(data=centroid.uprari,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#DDC5EB",size=6,stroke=1)+
+  geom_segment(aes(x=-0.4,xend=centroid.uprari$A1.centroid,
+               y=centroid.uprari$A2.centroid),color="black",lty="dashed")+
+  geom_segment(aes(x=centroid.uprari$A1.centroid,y=-0.6, 
+               yend=centroid.uprari$A2.centroid),color="black",lty="dashed")+  
+  geom_point(data=centroid.lowrari,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#831EB6",size=6,stroke=1)+
+  geom_segment(aes(x=-0.4,xend=centroid.lowrari$A1.centroid,
+               y=centroid.lowrari$A2.centroid),color="black",lty="dashed")+
+  geom_segment(aes(x=centroid.lowrari$A1.centroid,y=-0.6, 
+               yend=centroid.lowrari$A2.centroid),color="black",lty="dashed")+
+  geom_point(data=centroid.deepsea,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#12086F",size=6,stroke=1)+
+  geom_segment(aes(x=-0.4,xend=centroid.deepsea$A1.centroid,
+               y=centroid.deepsea$A2.centroid),color="black",lty="dashed")+
+  geom_segment(aes(x=centroid.deepsea$A1.centroid,y=-0.6, 
+               yend=centroid.deepsea$A2.centroid),color="black",lty="dashed")+
+  geom_segment(data=trait.vectors,mapping=aes(x=0,y=0,xend=A1,yend=A2),
+               arrow=arrow(length=unit(0.2,"cm")),color="black",size=0.5)+
+  geom_label_repel(data = trait.vectors, 
+                   aes(x = A1, y = A2, label = trait),fill="grey",label.size=0,
+                   hjust = 1.1,size=4)+
+  theme_classic()
+pca.centroids
+
+#-------------- Figure 3 LEFT: PCA + vectors + centroids -------------
+pca.vectors <- ggplot() +
+  geom_polygon(data=hull.outline,mapping=aes(x = A1, y = A2),alpha=0.5,fill="grey",
+               color="darkgrey",linewidth=0.7)+
+  geom_jitter(mapping=aes(size=abundance),shape=21,
+              width = 0.01, height = 0.01,color="#C2E5DF",fill="black") +
+  ggtitle("trait space across depths (0-480 m)")+
+  geom_segment(data=trait.vectors,mapping=aes(x=0,y=0,xend=A1,yend=A2),
+               arrow=arrow(length=unit(0.2,"cm")),color="darkblue",size=0.9)+
+  geom_label_repel(data = trait.vectors, 
+                   aes(x = A1, y = A2, label = trait),fill="lightyellow",label.size=0,
+                   size=4,hjust=0,vjust=0.5)+ 
+  geom_point(data=centroid.altiphotic,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#62D99C",size=7,stroke=1)+
+  geom_point(data=centroid.upmeso,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#BAE0F3",size=7,stroke=1)+
+  geom_point(data=centroid.lowmeso,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#50ABE7",size=7,stroke=1)+
+  geom_point(data=centroid.uprari,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#DDC5EB",size=7,stroke=1)+
+  geom_point(data=centroid.lowrari,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#831EB6",size=7,stroke=1)+
+  geom_point(data=centroid.deepsea,mapping=aes(x=A1.centroid, y=A2.centroid),
+             shape=23,color="white",fill="#12086F",size=7,stroke=1)+
+  scale_x_continuous(expand = c(0.01, 0.03)) +  # Remove padding on x-axis
+  scale_y_continuous(expand = c(0.01, 0.03)) + 
+  coord_cartesian(clip="off")+
+  theme_classic()
+pca.vectors
+
+A1.density <- ggplot(data = traits.realms, 
+                     aes(x = A1, fill = depth.realm, colour = depth.realm,
+                         weight=abundance)) + #weights the density plot by abundance
+  geom_density(alpha = 0.1) +
+  scale_x_continuous(expand = c(0, 0)) +  # Remove padding on x-axis
+  scale_y_continuous(expand = c(0, 0.02)) + 
+  scale_color_manual(values=rev(c("#62D99C","#BAE0F3","#50ABE7","#DDC5EB","#831EB6","#12086F")))+
+  scale_fill_manual(values=rev(c("#62D99C","#BAE0F3","#50ABE7","#DDC5EB","#831EB6","#12086F")))+
+  theme_classic()
+
+A2.density <- ggplot(data = traits.realms,
+         aes(x = A2, fill = depth.realm, colour = depth.realm, 
+             weight=abundance)) + #weights the density plot by abundance)) +
+  geom_density(alpha = 0.1) +
+  scale_x_continuous(expand = c(0, 0)) +  # Remove padding on x-axis
+  scale_y_continuous(expand = c(0, 0)) + 
+  scale_color_manual(values=rev(c("#62D99C","#BAE0F3","#50ABE7","#DDC5EB","#831EB6","#12086F")))+
+  scale_fill_manual(values=rev(c("#62D99C","#BAE0F3","#50ABE7","#DDC5EB","#831EB6","#12086F")))+
+  theme_classic()+
+  coord_flip()
+  #scale_x_continuous(position="top")+
+  #scale_y_reverse()
+
+pca.vectors %>%
+  insert_xaxis_grob(A1.density, grid::unit(1, "in"), position = "top") %>%
+  insert_yaxis_grob(A2.density, grid::unit(1, "in"), position = "right") %>%
+  ggdraw()
+  

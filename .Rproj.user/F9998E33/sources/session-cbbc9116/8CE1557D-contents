@@ -1,0 +1,316 @@
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggpubr)
+
+#### 1. Nb studies / continents ####
+continents <- read.csv("All_Studies.csv") %>%
+  filter(!socioeco=="") %>%
+  filter(!continent=="mix") %>%## need to address this later (fill missing data)
+  mutate(continent=case_when(continent=="Central America"~"North America",
+                             TRUE~continent))%>%
+  group_by(continent,socioeco) %>%
+  summarize(nb_studies=n_distinct(ID))  %>%
+  arrange(rev(continent)) %>%
+  mutate(socioeco=factor(socioeco,levels=c("mitigation","ecological","social")))
+
+# -------- social / ecological/ mitigation pillars -----------
+af_mechanisms <- continents %>%
+  filter(continent=="Africa")%>%
+  filter(!socioeco=="")
+
+total <- continents %>%
+  group_by(socioeco) %>%
+  summarize(tot_studies=sum(nb_studies)) %>%
+  left_join(af_mechanisms) %>%
+  mutate(prop_africa=nb_studies/tot_studies*100)
+
+palette <- c("#281E18","#5E270B","#C78E3A","#E3B76A","#FDFCD4","#0077b6")
+ggplot()+
+  geom_bar(stat="identity", position="stack",
+           data=continents, mapping=aes(y=nb_studies, x=socioeco,fill=continent))+
+  scale_fill_manual(values=rev(palette))+
+  theme_classic()+
+  xlab("")+
+  ylab("number of studies")+
+  geom_text(data=total,aes(label=paste("prop Africa =",round(prop_africa,0),"%"),
+                           y=tot_studies+10, x=socioeco))
+
+#.--------- nb of studies per pillar and african country ---------
+#### nb studies
+af_countries <- read.csv("All_Studies.csv") %>%
+  filter(!socioeco=="") %>%
+  filter(continent=="Africa") %>%
+  select(country,socioeco,ID) %>%
+  group_by(country,socioeco) %>%
+  summarize(nb_studies=n_distinct(ID))  %>%
+ # arrange(rev(continent)) %>%
+  mutate(socioeco=factor(socioeco,levels=c("mitigation","ecological","social")))
+
+ggplot()+
+  geom_tile(data=af_countries, mapping=aes(y=country, x=socioeco,fill=nb_studies),
+            colour="white",size=0.7)+
+  scale_fill_continuous(na.value = "gray")+
+  labs(fill = "nb of studies")+
+  scale_x_discrete(expand = c(0,0),position = "top")+
+  theme_classic()
+
+#### nb data points
+af_countries <- read.csv("All_Studies.csv") %>%
+  filter(!socioeco=="") %>%
+  filter(continent=="Africa") %>%
+  select(country,socioeco,ID) %>%
+  group_by(country,socioeco) %>%
+  summarize(data_points=n())  %>%
+  # arrange(rev(continent)) %>%
+  mutate(socioeco=factor(socioeco,levels=c("mitigation","ecological","social")))
+
+ggplot()+
+  geom_tile(data=af_countries, mapping=aes(y=country, x=socioeco,fill=data_points),
+            colour="white",size=0.7)+
+  scale_fill_continuous(na.value = "gray")+
+  labs(fill = "nb of data points")+
+  scale_x_discrete(expand = c(0,0),position = "top")+
+  theme_classic()
+
+#.--------- nb of studies per socio mechanism and african country ####
+#### nb studies
+mechanism_countries <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  #select(country,socioeco,ID) %>%
+  group_by(country,mechanism) %>%
+  summarize(nb_studies=n_distinct(ID))
+
+
+ggplot()+
+  geom_tile(data=mechanism_countries, mapping=aes(y=country, x=mechanism,fill=nb_studies),
+            colour="white",size=0.7)+
+  scale_fill_continuous(na.value = "gray")+
+  labs(fill = "nb of studies")+
+  scale_x_discrete(expand = c(0,0),position = "top")+
+  theme_classic()
+
+#### nb data points
+country_datapoints <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  group_by(country,mechanism) %>%
+  summarize(nb_datapoints=n())
+
+tot <- country_datapoints  %>%
+  group_by(mechanism) %>%
+  summarize(nb_datapoints=sum(nb_datapoints))
+
+ggplot()+
+  geom_tile(data=country_datapoints, mapping=aes(y=country, x=mechanism,fill=nb_datapoints),
+            colour="white",size=0.7)+
+  scale_fill_continuous(na.value = "gray")+
+  labs(fill = "nb of datapoints")+
+  scale_x_discrete(expand = c(0,0),position = "top")+
+  theme_classic()
+
+
+#### 2.1. vote counting per pathways ####
+datapoints <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  group_by(mechanism) %>%
+  summarize(total_datapoints=n())
+
+votes <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  mutate(mechanism=factor(trimws(mechanism)), #removes unwanted spaces
+         direction=factor(trimws(direction),
+            levels=c("positive", "neutral", "ambiguous","negative"))) %>%
+  group_by(mechanism,direction) %>%
+  summarize(nb_votes=n()) %>%
+  left_join(datapoints) %>%
+  mutate(proportion=nb_votes/total_datapoints)
+
+
+ggplot(votes, aes(fill=direction, y=nb_votes, x=mechanism)) + 
+  geom_bar(position="stack", stat="identity",width=0.8)+
+  scale_fill_manual(values=c("aquamarine3","seashell2","mediumpurple2","darksalmon"))+
+  theme(panel.grid.major.x = element_line(color = "white"))+
+  theme_classic()+
+  geom_text(aes(label=round(proportion*100,0)),
+            position=position_stack(vjust=0.5),size=3)+
+  labs(x="")+
+  labs(y="data points")+
+  coord_flip()
+
+
+
+
+
+#### 2.2. vote counting per pathways ####
+datapoints_indicators <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  group_by(mechanism,indicator) %>%
+  summarize(total_datapoints=n())
+
+
+votes <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  mutate(mechanism=factor(trimws(mechanism)), #removes unwanted spaces
+         direction=factor(trimws(direction),
+                          levels=c("positive", "neutral", "ambiguous","negative"))) %>%
+  group_by(indicator,direction) %>%
+  summarize(nb_votes=n()) %>%
+  left_join(datapoints_indicators) %>%
+  mutate(proportion=nb_votes/total_datapoints) %>%
+  mutate(indicator=factor(indicator, levels=c(
+    "cohesion","conflict",
+    "MPA knowledge","environmental awareness","research programs","education" ,
+    "catch","cpue","local food security",
+    "alternative livelihoods",
+    "income","employment","material assets",
+    "consultation", "participation" ,"decision making","governance","user rights")))
+
+
+ggplot(votes, aes(fill=direction, y=nb_votes, x=indicator)) + 
+  geom_bar(position="stack", stat="identity",width=0.8)+
+  scale_fill_manual(values=c("aquamarine3","seashell2","mediumpurple2","darksalmon"))+
+  theme(panel.grid.major.x = element_line(color = "white"))+
+  theme_classic()+
+  geom_text(aes(label=round(proportion*100,0)),
+            position=position_stack(vjust=0.5),size=3)+
+  labs(x="")+
+  labs(y="data points")+
+  coord_flip()
+
+#### 2.3. Characteristics of protected areas ####
+ecosystems <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  group_by(ecosystem) %>%
+  summarize(total_datapoints=n())
+
+#### age
+age <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  group_by(Age,direction) %>%
+  filter(!is.na(Age)) %>%
+  summarize(nb_votes=n()) %>%
+  mutate(Age=factor(trimws(Age),
+                    levels=c("young", "medium", "old")), #removes unwanted spaces
+         direction=factor(trimws(direction),
+                          levels=c("positive", "neutral", "ambiguous","negative")))
+
+age.plot <- ggplot(age, aes(fill=direction, y=nb_votes, x=Age)) + 
+  geom_bar(position="stack", stat="identity",width=0.8)+
+  scale_fill_manual(values=c("aquamarine3","seashell2","mediumpurple2","darksalmon"))+
+  theme(panel.grid.major.x = element_line(color = "white"))+
+  theme_classic()+
+  labs(x="")+
+  labs(y="data points")+
+  ggtitle("age")
+  #coord_flip()
+
+#### governance
+governance <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  group_by(governance,direction) %>%
+  filter(!governance %in% c("","mix")) %>%
+  filter(!is.na(governance)) %>%
+  summarize(nb_votes=n()) %>%
+  mutate(governance=factor(trimws(governance)),
+                    #levels=c("young", "medium", "old")), #removes unwanted spaces
+         direction=factor(trimws(direction),
+                          levels=c("positive", "neutral", "ambiguous","negative")))
+
+governance.plot <- ggplot(governance, aes(fill=direction, y=nb_votes, x=governance)) + 
+  geom_bar(position="stack", stat="identity",width=0.8)+
+  scale_fill_manual(values=c("aquamarine3","seashell2","mediumpurple2","darksalmon"))+
+  theme(panel.grid.major.x = element_line(color = "white"))+
+  theme_classic()+
+  labs(x="")+
+  labs(y="data points")+
+  ggtitle("governance")
+#coord_flip()
+
+#### size
+size <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  group_by(Size,direction) %>%
+  filter(!Size %in% c("","mix")) %>%
+  filter(!is.na(Size)) %>%
+  summarize(nb_votes=n()) %>%
+  mutate(Size=factor(trimws(Size),
+         levels=c("small", "medium", "large")), #removes unwanted spaces
+         direction=factor(trimws(direction),
+                          levels=c("positive", "neutral", "ambiguous","negative")))
+
+size.plot <- ggplot(size, aes(fill=direction, y=nb_votes, x=Size)) + 
+  geom_bar(position="stack", stat="identity",width=0.8)+
+  scale_fill_manual(values=c("aquamarine3","seashell2","mediumpurple2","darksalmon"))+
+  theme(panel.grid.major.x = element_line(color = "white"),
+        axis.text.x = element_text(color = "black"))+
+  theme_classic()+
+  labs(x="")+
+  labs(y="data points")+
+  ggtitle("size")
+
+#### levels of protection
+protection <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  group_by(MPAprotection,direction) %>%
+  filter(!MPAprotection %in% c("","mix")) %>%
+  filter(!is.na(MPAprotection)) %>%
+  summarize(nb_votes=n()) %>%
+  mutate(MPAprotection=factor(trimws(MPAprotection),
+                     levels=c("moderate", "highly", "fully")), #removes unwanted spaces
+         direction=factor(trimws(direction),
+                          levels=c("positive", "neutral", "ambiguous","negative")))
+
+protection.plot <- ggplot(protection, aes(fill=direction, y=nb_votes, x=MPAprotection)) + 
+  geom_bar(position="stack", stat="identity",width=0.8)+
+  scale_fill_manual(values=c("aquamarine3","seashell2","mediumpurple2","darksalmon"))+
+  theme(panel.grid.major.x = element_line(color = "white"))+
+  theme_classic()+
+  theme(axis.text.x = element_text(color = "black"))+
+  labs(x="")+
+  labs(y="data points")+
+  ggtitle("level of protection")
+
+ggarrange(protection.plot, size.plot, age.plot, governance.plot, 
+          ncol=2,nrow=2,legend="right",common.legend = TRUE)
+
+#### stat test ####
+library(nnet)
+
+covariates <- read.csv("All_Studies.csv") %>%
+  filter(socioeco=="social") %>%
+  filter(continent=="Africa") %>%
+  select(Age,Size,direction,MPAprotection,governance)%>%
+  drop_na() %>%
+  filter(MPAprotection!="mix") %>%
+  mutate(direction=factor(direction),
+         governance=factor(governance),
+         Age=factor(Age),
+         MPAprotection=factor(MPAprotection))
+  
+
+model <- multinom(data=covariates, direction~governance+Age+MPAprotection+Size) # AIC=172
+model <-multinom(data=covariates, direction~governance+Age+MPAprotection) #AIC = 182
+#multinom(data=covariates, direction~governance+Age) # AIC = 187
+#multinom(data=covariates, direction~governance) # AIC = 200
+summary(model)
+
+# Calculate z-scores
+z_scores <- summary(model)$coefficients/summary(model)$standard.errors
+
+# Calculate p-values
+2 * (1 - pnorm(abs(z_scores)))
+
+
+# Likelihood ratio test for overall predictors
+anova(model, test = "Chisq")

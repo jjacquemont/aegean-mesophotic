@@ -1,0 +1,103 @@
+﻿Genus,Species,Family,cryptic,length,Station,Depth,site,forest,Habitat
+Scorpaena,loppei,Scorpaenidae,yes,105,TRI24-01,60,Trikeri,in,black corals on rocky outcrops
+Anthias,anthias,Anthiadidae,no,65,TRI24-01,60,Trikeri,in,black corals on rocky outcrops
+Gobius,vittatus,Gobiidae,yes,40,TRI24-01,60,Trikeri,in,black corals on rocky outcrops
+Scorpaena,porcus,Scorpaenidae,yes,57,TRI24-02,60,Trikeri,in,black corals on rocky outcrops
+Vanneaugobius,dollfusi,Gobiidae,yes,45,TRI24-02,60,Trikeri,in,black corals on rocky outcrops
+Gobius,vittatus,Gobiidae,yes,40,TRI24-02,60,Trikeri,in,black corals on rocky outcrops
+Gobius,auratus,Gobiidae,yes,40,TRI24-02,60,Trikeri,in,black corals on rocky outcrops
+Gobius,vittatus,Gobiidae,yes,30,TRI24-02,60,Trikeri,in,black corals on rocky outcrops
+Gobius,vittatus,Gobiidae,yes,50,TRI24-02,60,Trikeri,in,black corals on rocky outcrops
+Gobius,vittatus,Gobiidae,yes,34,TRI24-03,60,Trikeri,in,sponge on rocky outcrops
+Vanneaugobius,dollfusi,Gobiidae,yes,30,TRI24-05,50,Trikeri,in,black corals on rocky outcrops
+Gobius,auratus,Gobiidae,yes,30,TRI24-06,50,Trikeri,in,black corals on rocky outcrops
+Gobius,auratus,Gobiidae,yes,35,TRI24-06,50,Trikeri,in,black corals on rocky outcrops
+Thorogobius,macrolepis,Gobiidae,yes,35,TRI24-06,50,Trikeri,in,black corals on rocky outcrops
+Gobius,vittatus,Gobiidae,yes,40,TRI24-07,40,Trikeri,out,"rocky outcrop, algae + sponge"
+Thorogobius,macrolepis,Gobiidae,yes,33,TRI24-07,40,Trikeri,out,"rocky outcrop, algae + sponge"
+Thorogobius,macrolepis,Gobiidae,yes,48,TRI24-07,40,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,48,TRI24-07,40,Trikeri,out,"rocky outcrop, algae + sponge"
+Corcyrogobius,liechtensteini,Gobiidae,yes,22,TRI24-09,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,55,TRI24-09,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,32,TRI24-09,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,40,TRI24-09,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Millerigobius,macrocephalus,Gobiidae,yes,15,TRI24-09,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,40,TRI24-10,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Millerigobius,macrocephalus,Gobiidae,yes,19,TRI24-10,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Scorpaena,sp,Scorpaenidae,yes,NA,TRI24-10,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,34,TRI-24-11,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,39,TRI-24-11,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Scorpaena,loppei,Scorpaenidae,yes,50,TRI-24-12,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Scorpaena,loppei,Scorpaenidae,yes,54,TRI-24-12,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Tripterygion,delaisi,Tripterygiidae,yes,NA,TRI-24-12,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Tripterygion,delaisi,Tripterygiidae,yes,NA,TRI-24-12,20,Trikeri,out,"rocky outcrop, algae + sponge"
+Scorpaena,porcus,Scorpaenidae,yes,70,TRI-24-13,10,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,fallax,Gobiidae,yes,38,TRI-24-13,10,Trikeri,out,"rocky outcrop, algae + sponge"
+Millerigobius,macrocephalus,Gobiidae,yes,21,TRI-24-13,10,Trikeri,out,"rocky outcrop, algae + sponge"
+Lepadogaster,candolii,Gobiesocidae,yes,30,TRI-24-13,10,Trikeri,out,"rocky outcrop, algae + sponge"
+Corcyrogobius,liechtensteini,Gobiidae,yes,19,TRI-24-14,10,Trikeri,out,"rocky outcrop, algae + sponge"
+Tripterygion,delaisi,Tripterygiidae,yes,NA,TRI-24-14,10,Trikeri,out,"rocky outcrop, algae + sponge"
+Millerigobius,macrocephalus,Gobiidae,yes,21,TRI-24-14,10,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,28,TRI-24-15,50,Trikeri,out,"rocky outcrop, algae + sponge"
+Vanneaugobius,dollfusi,Gobiidae,yes,33,TR-24-16,54,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,vittatus,Gobiidae,yes,27,TR-24-16,54,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,vittatus,Gobiidae,yes,NA,TR-24-16,54,Trikeri,out,"rocky outcrop, algae + sponge"
+Thorogobius,macrolepis,Gobiidae,yes,54,TR-24-17,54,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,fallax,Gobiidae,yes,44,TR-24-18,10,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,fallax,Gobiidae,yes,42,TR-24-18,10,Trikeri,out,"rocky outcrop, algae + sponge"
+Millerigobius,macrocephalus,Gobiidae,yes,21,TRI-24-19,10,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,vittatus,Gobiidae,yes,,TRI-24-20,30,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,34,TRI-24-20,30,Trikeri,out,"rocky outcrop, algae + sponge"
+Scorpaena,notata,Scorpaenidae,yes,49,TRI-24-20,30,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,34,TRI-24-21,30,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,58,TRI-24-21,30,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,vittatus,Gobiidae,yes,34,TRI-24-22,30,Trikeri,out,"rocky outcrop, algae + sponge"
+Corcyrogobius,liechtensteini,Gobiidae,yes,20,TRI-24-22,30,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,34,TRI-24-23,40,Trikeri,out,"rocky outcrop, algae + sponge"
+Thorogobius,macrolepis,Gobiidae,yes,48,TRI-24-23,40,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,vittatus,Gobiidae,yes,29,TRI-24-24,40,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,auratus,Gobiidae,yes,24,TRI-24-24,40,Trikeri,out,"rocky outcrop, algae + sponge"
+Thorogobius,macrolepis,Gobiidae,yes,32,TRI-24-24,40,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,cruentatus,Gobiidae,yes,57,TRI-24-24,40,Trikeri,out,"rocky outcrop, algae + sponge"
+Thorogobius,macrolepis,Gobiidae,yes,33,TRI-24-25,60,Trikeri,out,"rocky outcrop, algae + sponge"
+Vanneaugobius,dollfusi,Gobiidae,yes,32,TRI-24-25,60,Trikeri,out,"rocky outcrop, algae + sponge"
+Vanneaugobius,dollfusi,Gobiidae,yes,30,TRI-24-25,60,Trikeri,out,"rocky outcrop, algae + sponge"
+Vanneaugobius,dollfusi,Gobiidae,yes,24,TRI-24-25,60,Trikeri,out,"rocky outcrop, algae + sponge"
+Vanneaugobius,dollfusi,Gobiidae,yes,33,TRI-24-27,60,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,vittatus,Gobiidae,yes,39,TRI-24-27,60,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,vittatus,Gobiidae,yes,37,TRI-24-28,60,Trikeri,out,"rocky outcrop, algae + sponge"
+Gobius,vittatus,Gobiidae,yes,39,TRI-24-29,60,Trikeri,in,black corals on rocky outcrops
+Vanneaugobius,dollfusi,Gobiidae,yes,29,TRI-24-30,48,Trikeri,in,red coral
+Apogon,imberbis,Apogonidae,yes,52,FOU-24-01,10,Fourni,out,"rock, encrusting algae"
+Coris,julis,Labridae,no,14,FOU-24-04,20,Fourni,out,"rock, encrusting algae"
+Gobius,vittatus,Gobiidae,yes,13,FOU-24-04,20,Fourni,out,"rock, encrusting algae"
+Gobius,vittatus,Gobiidae,yes,14,FOU-24-04,20,Fourni,out,"rock, encrusting algae"
+Scorpaena,sp,Scorpaenidae,yes,60,FOU-24-04,20,Fourni,out,"rock, encrusting algae"
+Apogon,imberbis,Apogonidae,yes,54,FOU-24-04,20,Fourni,out,"rock, encrusting algae"
+Diplecogaster,sp,Gobiesocidae,yes,8,FOU-24-10,87,Fourni,out,"rocky outcrop, sponge"
+Gobius,vittatus,Gobiidae,yes,26,FOU-24-10,87,Fourni,out,"rocky outcrop, sponge"
+Scorpaena,sp,Scorpaenidae,yes,17,FOU-24-11,82,Fourni,out,"rocky outcrop, sponge"
+Thorogobius,macrolepis,Gobiidae,yes,44,FOU-24-11,82,Fourni,out,"rocky outcrop, sponge"
+Parablennius,rouxi,Blennidae,yes,26,FOU-24-13,90,Fourni,in,black corals on rocky outcrops + sponge
+Vanneaugobius,dollfusi,Gobiidae,yes,25,FOU-24-17,90,Fourni,in,black corals on rocky outcrops + sponge
+Thorogobius,macrolepis,Gobiidae,yes,29,FOU-24-18,90,Fourni,in,black corals on rocky outcrops + sponge
+Anthias,anthias,Anthiadidae,no,25,CIO24-01,73.8,Ciotat,in,Black coral forest
+Anthias,anthias,Anthiadidae,no,24,CIO24-01,73.8,Ciotat,in,Black coral forest
+Vanneaugobius,dollfusi,Gobiidae,yes,21,CIO24-02,74.4,Ciotat,in,Black coral forest
+Vanneaugobius,dollfusi,Gobiidae,yes,21,CIO24-02,74.4,Ciotat,in,Black coral forest
+Scorpaena,sp,Scorpaenidae,yes,73,CIO24-02,74.4,Ciotat,in,Black coral forest
+Vanneaugobius,dollfusi,Gobiidae,yes,23,CIO24-03,74,Ciotat,in,Black coral forest
+Anthias,anthias,Anthiadidae,no,28,CIO24-04,73,Ciotat,in,Gorgonian forest
+Anthias,anthias,Anthiadidae,no,27,CIO24-05,73,Ciotat,in,Gorgonian forest
+Anthias,anthias,Anthiadidae,no,47,CIO24-05,73,Ciotat,in,Gorgonian forest
+Anthias,anthias,Anthiadidae,no,23,CIO24-06,74,Ciotat,in,Gorgonian forest
+Anthias,anthias,Anthiadidae,no,44,CIO24-06,74,Ciotat,in,Gorgonian forest
+Anthias,anthias,Anthiadidae,no,22,CIO24-06,74,Ciotat,in,Gorgonian forest
+Coris,julis,Labridae,no,24,CIO24-07,74,Ciotat,out,Rock
+Anthias,anthias,Anthiadidae,no,28,CIO24-08,75,Ciotat,out,Rock
+Anthias,anthias,Anthiadidae,no,28,CIO24-09,74,Ciotat,out,Rock
+Anthias,anthias,Anthiadidae,no,26,CIO24-09,74,Ciotat,out,Rock
+Scorpaena,sp,Scorpaenidae,yes,76,CIO24-10,79,Ciotat,out,Rock
+Anthias,anthias,Anthiadidae,no,27,CIO24-11,75,Ciotat,out,Rock
+Anthias,anthias,Anthiadidae,no,23,CIO24-12,74,Ciotat,out,Rock
+Anthias,anthias,Anthiadidae,no,24,CIO24-12,74,Ciotat,out,Rock

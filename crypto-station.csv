@@ -1,0 +1,61 @@
+﻿station,site,coordinates,country,date,depth,abundance,collected,forest,richness,note,gear,collectors
+TRI24-01,Trikeri,,Greece,6-Apr-24,60,3,3,in,3,,"rebreather diving, 1m2 sampling station",Erwan and Clement
+TRI24-02,Trikeri,,Greece,6-Apr-24,60,6,6,in,4,,"rebreather diving, 1m2 sampling station",Erwan and Clement
+TRI24-03,Trikeri,,Greece,7-Apr-24,60,1,1,in,1,,"rebreather diving, 1m2 sampling station",Clement Madelaine and Joel Casset
+TRI24-04,Trikeri,,Greece,7-Apr-24,60,1,0,in,1,,"rebreather diving, 1m2 sampling station",Clement Madelaine and Joel Casset
+TRI24-05,Trikeri,,Greece,8-Apr-24,50,3,3,in,2,,"rebreather diving, 1m2 sampling station",Clement Madelaine and Joel Casset
+TRI24-06,Trikeri,,Greece,8-Apr-24,50,3,1,in,1,,"rebreather diving, 1m2 sampling station",Clement Madelaine and Joel Casset
+TRI24-07,Trikeri,,Greece,9-Apr-24,40,6,0,out,NA,6 were captured but bottle with specimen lost during dive,"rebreather diving, 1m2 sampling station",Joel Casset and Florient Cabo
+TRI24-08,Trikeri,,Greece,9-Apr-24,40,6,4,out,3,,"rebreather diving, 1m2 sampling station",Joel Casset and Florient Cabo
+TRI24-09,Trikeri,,Greece,10-Apr-24,20,5,5,out,3,,"rebreather diving, 1m2 sampling station",Joel Casset and Florient Cabo
+TRI24-10,Trikeri,,Greece,10-Apr-24,20,3,2,out,3,escaped: Scorpaena sp.,"rebreather diving, 1m2 sampling station",Joel Casset and Florient Cabo
+TRI24-11,Trikeri,,Greece,11-Apr-24,20,2,2,out,1,,"rebreather diving, 1m2 sampling station","Clement Madelaine, Florient Cado and Joel Casset"
+TRI24-12,Trikeri,,Greece,11-Apr-24,20,4,2,out,2,,"rebreather diving, 1m2 sampling station","Clement Madelaine, Florient Cado and Joel Casset"
+TRI24-13,Trikeri,,Greece,13-Apr-24,10,4,4,out,4,,"rebreather diving, 1m2 sampling station",Clement Madeleine et Jerome
+TRI24-14,Trikeri,,Greece,13-Apr-24,10,3,2,out,3,,"rebreather diving, 1m2 sampling station",Clement Madeleine et Jerome
+TRI24-15,Trikeri,,Greece,14-Apr-24,50,2,1,out,1,divers forgot tarp so anesthetic was injected directly in rock cavities,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-16,Trikeri,,Greece,15-Apr-24,54,3,2,out,2,,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-17,Trikeri,,Greece,15-Apr-24,54,1,1,out,1,,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-18,Trikeri,,Greece,16-Apr-24,10,3,2,out,2,escaped: female Tripterygion delaisi,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-19,Trikeri,,Greece,16-Apr-24,10,1,1,out,1,,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-20,Trikeri,,Greece,17-Apr-24,30,3,3,out,3,,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-21,Trikeri,,Greece,18-Apr-24,30,2,2,out,1,,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-22,Trikeri,,Greece,18-Apr-24,30,2,2,out,2,,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-23,Trikeri,,Greece,19-Apr-24,40,4,2,out,2,~2 G.auratus escaped,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-24,Trikeri,,Greece,19-Apr-24,40,6,4,out,4,~2 G.auratus escaped,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-25,Trikeri,,Greece,22-Apr-24,60,4,4,out,2,nearby boey 6,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-26,Trikeri,,Greece,24-Apr-24,60,0,0,out,0,nearby boey 6,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-27,Trikeri,,Greece,24-Apr-24,60,3,2,out,2,nearby boey 6,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-28,Trikeri,,Greece,25-Apr-24,60,3,1,out,2,escaped: G. vittatus + sand-colored goby ,"rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI24-29,Trikeri,,Greece,25-Apr-24,60,3,1,in,2,"2 escaped, orange with white dots, likey Vanneaugobius dollfusi","rebreather diving, 1m2 sampling station",Florient Cabo et Jerome
+TRI-24-30,Trikeri,,Greece,3-May-24,48,3,1,in,3,escaped: 2 small Scorpanidae. Red coral site.,"rebreather diving, 1m2 sampling station","Jerome, Maxime et Lorenzo"
+FOU-24-01,Fourni,,Greece,25-May-24,10,1,1,out,1,,"rebreather diving, 1m2 sampling station","Clément, Maxime, Manu"
+FOU-24-02,Fourni,,Greece,26-May-24,90,0,0,out,0,,"rebreather diving, 1m2 sampling station",Florient
+FOU-24-03,Fourni,,Greece,26-May-24,80,2,0,out,2,escaped: orange gobi + striped gobi ,"rebreather diving, 1m2 sampling station",Florient
+FOU-24-04,Fourni,,Greece,27-May-24,20,5,5,out,4,,"rebreather diving, 1m2 sampling station",Florient
+FOU-24-05,Fourni,,Greece,27-May-24,20,0,0,out,0,,"rebreather diving, 1m2 sampling station",Florient
+FOU-24-06,Fourni,,Greece,28-May-24,85,0,0,out,0,,"rebreather diving, 1m2 sampling station",Maxime
+FOU-24-07,Fourni,,Greece,28-May-24,80,0,0,out,0,,"rebreather diving, 1m2 sampling station",Maxime
+FOU-24-08,Fourni,,Greece,29-May-24,20,1,0,out,1,,"rebreather diving, 1m2 sampling station",Florient
+FOU-24-09,Fourni,,Greece,29-May-24,10,0,0,out,0,,"rebreather diving, 1m2 sampling station",Florient
+FOU-24-10,Fourni,,Greece,31-May-24,87,2,2,out,2,,"rebreather diving, 1m2 sampling station",Florient
+FOU-24-11,Fourni,,Greece,31-May-24,82,2,2,out,2,,"rebreather diving, 1m2 sampling station",Florient
+FOU-24-12,Fourni,,Greece,2-Jun-24,10,0,0,out,0,,"rebreather diving, 1m2 sampling station",Joel et Lorenzo
+FOU-24-13,Fourni,,Greece,7-Jun-24,90,2,1,in,2,,"rebreather diving, 1m2 sampling station",Florient
+FOU-24-14,Fourni,,Greece,7-Jun-24,80,1,0,in,1,,"rebreather diving, 1m2 sampling station",Florient
+FOU-24-15,Fourni,,Greece,8-Jun-24,80,1,0,in,1,escaped: striped gobi,"rebreather diving, 1m2 sampling station",Joel et Manu
+FOU-24-16,Fourni,,Greece,8-Jun-24,80,1,0,in,1,escaped: striped gobi,"rebreather diving, 1m2 sampling station",Joel et Manu
+FOU-24-17,Fourni,,Greece,10-Jun-24,90,1,1,in,1,,"rebreather diving, 1m2 sampling station",Joel
+FOU-24-18,Fourni,,Greece,10-Jun-24,90,1,1,in,1,,"rebreather diving, 1m2 sampling station",Joel
+CIO24-01,La Ciotat,043°02.889 N / 005°39.170 E,France,27-Sep-24,73.8,4,2,in,1,,"rebreather diving, 1m2 sampling station",Joel
+CIO24-02,La Ciotat,043°02.889 N / 005°39.170 E,France,27-Sep-24,74.4,3,3,in,2,,"rebreather diving, 1m2 sampling station",Joel
+CIO24-03,La Ciotat,043°02.889 N / 005°39.170 E,France,29-Sep-24,74,1,1,in,1,,"rebreather diving, 1m2 sampling station",Clem et Max
+CIO24-04,La Ciotat,043°02.889 N / 005°39.170 E,France,30-Sep-24,73,2,1,in,2,1 gobi escaped,"rebreather diving, 1m2 sampling station",Clem et Max
+CIO24-05,La Ciotat,043°02.889 N / 005°39.170 E,France,30-Sep-24,73,3,2,in,3,1 scorpionfish escaped,"rebreather diving, 1m2 sampling station",Clem et Max
+CIO24-06,La Ciotat,043°02.889 N / 005°39.170 E,France,1-Oct-24,74,3,3,in,2,,"rebreather diving, 1m2 sampling station",Clem et Max
+CIO24-07,La Ciotat,043°02.889 N / 005°39.170 E,France,1-Oct-24,74,1,1,out,1,,"rebreather diving, 1m2 sampling station",Clem et Max
+CIO24-08,La Ciotat,043°02.889 N / 005°39.170 E,France,1-Oct-24,75,1,1,out,1,,"rebreather diving, 1m2 sampling station",Clem et Max
+CIO24-09,La Ciotat,043°02.889 N / 005°39.170 E,France,5-Oct-24,74,6,2,out,1,4 anthias escaped,"rebreather diving, 1m2 sampling station",Joel et Franck
+CIO24-10,La Ciotat,043°02.889 N / 005°39.170 E,France,5-Oct-24,79,3,1,out,2,2 anthias escaped,"rebreather diving, 1m2 sampling station",Joel et Franck
+CIO24-11,La Ciotat,043°02.889 N / 005°39.170 E,France,6-Oct-24,75,1,1,out,1,,"rebreather diving, 1m2 sampling station",Benoit et Max
+CIO24-12,La Ciotat,043°02.889 N / 005°39.170 E,France,6-Oct-24,74,2,2,out,1,,"rebreather diving, 1m2 sampling station",Benoit et Max

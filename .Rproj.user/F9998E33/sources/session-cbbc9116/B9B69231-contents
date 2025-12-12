@@ -1,0 +1,88 @@
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(fishualize)
+library(mgcv) #gam model
+library(modelr) #data manipulation such as data_grid
+library(ggpubr) #combining ggplot figures
+library(viridis)
+
+#### 1. Fishing pressure ####
+#### Pigadi ####
+fishing.lines <- read.csv("fish-transects.csv") %>%
+  filter(species=="fishing line" & area=="pigadi") %>%
+  mutate(depth=case_when(depth==41~40,
+                         depth==19~20,
+                         TRUE~depth)) %>%
+  group_by(area, transect.nb,depth,forest) %>%
+  summarize (fishing.lines=sum(number))%>%
+  mutate(depth=factor(depth,levels=c("10","20","30","40","50","55","60")),
+         forest=factor(forest,levels=c("out","in")))%>%
+  arrange(depth,forest)
+
+fishing.lines.means <- fishing.lines %>%
+  group_by(area,depth,forest) %>%
+  summarize (replicates=n(), fishing.lines.mean=mean(fishing.lines),
+             fishing.lines.se=sd(fishing.lines)*1.96/n())
+
+ggplot()+
+  geom_bar(fishing.lines.means ,mapping=aes(x=depth,y=fishing.lines.mean,fill=forest),
+           width=0.6,stat="identity", position=position_dodge())+
+  geom_point(fishing.lines,mapping=aes(x=depth,y=fishing.lines,fill=forest), 
+             shape=21,position=position_dodge(width=0.55))+
+  theme_classic()+
+  geom_errorbar(fishing.lines.means,width=0.1,
+                mapping=aes(x=c(1,2,3,4,4.85,5.15,5.85,6.15,6.85,7.15),
+                          ymin = fishing.lines.mean-fishing.lines.se, 
+                          ymax = fishing.lines.mean+fishing.lines.se), 
+                position=position_dodge())+
+  #position=position_dodge2(width=2,preserve = "single"))+
+  scale_fill_manual(values=c("#FEB72DFF","#D14E72FF"))+
+  ylab("fishing lines. transect-1")
+
+## avg in forest
+read.csv("fish-transects.csv") %>%
+  filter(species=="fishing line" & area=="pigadi" & forest=="in") %>%
+  group_by(transect.nb) %>%
+  summarize (number=sum(number)) %>%
+  summarize (fishing.lines=mean(number), se=sd(number)*1.96/n(),replicates=n())
+
+#### Fourni ####
+fishing.lines <- read.csv("fish-transects.csv") %>%
+  filter(species=="fishing line" & area=="fourni") %>%
+  mutate(depth=case_when(depth==41~40,
+                         depth==19~20,
+                         TRUE~depth)) %>%
+  group_by(area, transect.nb,depth,forest) %>%
+  summarize (fishing.lines=sum(number))%>%
+  mutate(depth=factor(depth,levels=c("10","20","30","40","80","85","90")),
+         forest=factor(forest,levels=c("out","in")))%>%
+  arrange(depth,forest)
+
+fishing.lines.means <- fishing.lines %>%
+  group_by(area,depth,forest) %>%
+  summarize (replicates=n(), fishing.lines.mean=mean(fishing.lines),
+             fishing.lines.se=sd(fishing.lines)*1.96/n())
+
+ggplot()+
+  geom_bar(fishing.lines.means ,mapping=aes(x=depth,y=fishing.lines.mean,fill=forest),
+           width=0.6,stat="identity", position=position_dodge())+
+  geom_point(fishing.lines,mapping=aes(x=depth,y=fishing.lines,fill=forest), 
+             shape=21,position=position_dodge(width=0.55))+
+  theme_classic()+
+  geom_errorbar(fishing.lines.means,width=0.1,
+                mapping=aes(x=c(1,2,3,4,4.85,5.15,5.85,6.15,6.85,7.15),
+                            ymin = fishing.lines.mean-fishing.lines.se, 
+                            ymax = fishing.lines.mean+fishing.lines.se), 
+                position=position_dodge())+
+  #position=position_dodge2(width=2,preserve = "single"))+
+  scale_fill_manual(values=c("#FEB72DFF","#D14E72FF"))+
+  ylab("fishing lines. transect-1")
+
+## avg in forest
+read.csv("fish-transects.csv") %>%
+  filter(species=="fishing line" & area=="fourni" & forest=="in") %>%
+  group_by(transect.nb) %>%
+  summarize (number=sum(number)) %>%
+  summarize (fishing.lines=mean(number), se=sd(number)*1.96/n(),replicates=n())
+

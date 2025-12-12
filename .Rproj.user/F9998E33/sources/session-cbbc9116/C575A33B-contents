@@ -1,0 +1,97 @@
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+fish_transects <- read.csv("fish-transects.csv")
+
+richness_raw <- fish_transects %>%
+  filter(!(species %in% c("fishing line", "ind"))) %>%
+  mutate(habitat = case_when(
+    depth <= 40 ~ "shallow reef",
+    depth > 40 & forest == "in" ~ "deep forest",
+    depth > 40 & forest == "out" ~ "deep barren"
+  )) %>%
+  group_by(area, habitat, transect.nb, species) %>%
+  summarize(abundance = sum(number), .groups = "drop") %>%
+  group_by(area, habitat, transect.nb) %>%
+  summarize(species_richness = n(), .groups = "drop")
+
+
+## STATS######
+mean_richness <- richness_raw %>%
+  group_by(habitat) %>%
+  summarize(mean_richness = mean(species_richness))
+
+anova_habitat <- aov(species_richness ~ habitat, data = richness_raw)
+summary(anova_habitat)
+TukeyHSD(anova_habitat)
+
+### the stats show that 
+# shallow reef-deep barren p=0.0000000
+# shallow reef-deep forest p=0.0000007
+# deep forest-deep barren p=0.3036849
+
+
+means_df <- richness_raw %>%
+  group_by(area, habitat) %>%
+  summarize(mean = mean(species_richness), .groups = "drop")
+
+
+
+ggplot(richness_raw, aes(x = species_richness, fill = habitat)) +
+  geom_density(alpha = 0.6, color = "black") +
+  facet_wrap(~area) +
+  labs(
+    title = "Species Richness Distribution by Habitat and Site",
+    x = "species richness per transect",
+    y = "density"
+  ) +
+  scale_fill_manual(
+    values = c(
+      "shallow reef" = "#1FBFC0",   # turquoise blue
+      "deep forest" = "#7B4EA3",    # purple
+      "deep barren" = "#D9CBA3"     # sandy beige
+    )) + scale_color_manual(
+      values = c(
+        "shallow reef" = "#1FBFC0",
+        "deep forest" = "#7B4EA3",
+        "deep barren" = "#D9CBA3"
+      )) +
+  theme_minimal() +
+  geom_vline(data = means_df, aes(xintercept = mean, color = habitat), linetype = "dashed", size = 1) +
+  
+  # Annotating Lines and Asterisk
+  geom_segment(data = data.frame(
+    area = c("fourni", "fourni", "pigadi", "pigadi"),
+    x_start = c(1, 6, 1, 5),  # customize based on species richness range
+    x_end = c(5, 9.5, 5, 9.5),
+    y = c(-0.03, -0.06, -0.03, -0.06)
+  ),
+  aes(x = x_start, xend = x_end, y = y, yend = y, group = interaction(x_start, x_end)),
+  inherit.aes = FALSE
+  ) +
+  geom_text(data = data.frame(
+    area = c("fourni", "pigadi"),
+    x = c(8, 7),
+    y = c(-0.06, -0.06),
+    label = "*"
+  ),
+  aes(x = x, y = y, label = label),
+  size = 8,
+  inherit.aes = FALSE
+  ) +
+  coord_cartesian(ylim = c(-0.06, NA))  # to give space under the x-axis for annotation
+
+
+
+### LABELING for mean 
+geom_label(
+  data = means_df,
+  aes(x = mean, y = 0.65, label = round(mean, 1), fill = habitat),
+  inherit.aes = FALSE,
+  angle = 90,
+  vjust = -0.5,
+  size = 3.5,
+  label.size = 0.2
+)
+

@@ -1,0 +1,27 @@
+{
+    "id": "D885DC08",
+    "path": "~/Library/CloudStorage/GoogleDrive-jacquemont@nceas.ucsb.edu/My Drive/2.Projects/1.DEEP_LIFE/1.Med2024/1.Data-analysis/1.fish-communities.R",
+    "project_path": "1.fish-communities.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1744836767199.0,
+    "source_on_save": false,
+    "relative_order": 3,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "305,0",
+        "scrollLine": "300"
+    },
+    "folds": "90|18|120|0|\n125|22|157|0|\n158|15|186|0|\n187|18|216|0|\n503|23|524|0|\n599|42|677|0|\n678|34|728|0|\n829|34|841|19|\n",
+    "lastKnownWriteTime": 1765561485,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1765561485201,
+    "read_only": false,
+    "read_only_alternatives": []
+}
